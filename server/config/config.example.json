@@ -1,0 +1,36 @@
+{
+  "app": {
+    "threads_num": 2,
+    "document_root": "./public",
+    "upload_path": "./uploads",
+    "enable_session": false
+  },
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "port": 8080,
+      "https": false
+    }
+  ],
+  "db_clients": [
+    {
+      "name": "default",
+      "rdbms": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "dbname": "picaresque",
+      "user": "picaresque_app",
+      "passwd": "change-me",
+      "is_fast": false,
+      "number_of_connections": 4,
+      "timeout": 10,
+      "auto_batch": false
+    }
+  ],
+  "plugins": [],
+  "ssl": {
+    "enabled": false,
+    "certificate": "",
+    "private_key": ""
+  }
+}
