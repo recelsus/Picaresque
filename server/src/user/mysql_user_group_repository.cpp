@@ -126,6 +126,39 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
     return FindUserDetailsById(row[0]);
   }
 
+  std::optional<UserDetails> FindUserDetailsByWebSessionTokenHash(
+      const std::string& token_hash) const override {
+    auto connection = OpenConnection();
+    auto result = ExecuteQuery(
+        connection.get(),
+        "SELECT user_id FROM user_web_sessions WHERE token_hash = '" +
+            EscapeSqlString(connection.get(), token_hash) +
+            "' AND enabled = 1 AND expires_at > CURRENT_TIMESTAMP(3) LIMIT 1");
+    MYSQL_ROW row = mysql_fetch_row(result.get());
+    if (row == nullptr || row[0] == nullptr) {
+      return std::nullopt;
+    }
+    return FindUserDetailsById(row[0]);
+  }
+
+  std::optional<auth::UserPasswordRecord> FindUserPasswordByLoginId(
+      const std::string& login_id) const override {
+    auto connection = OpenConnection();
+    auto result = ExecuteQuery(
+        connection.get(),
+        "SELECT user_id, password_hash, is_active FROM users WHERE login_id = '" +
+            EscapeSqlString(connection.get(), login_id) + "' LIMIT 1");
+    MYSQL_ROW row = mysql_fetch_row(result.get());
+    if (row == nullptr) {
+      return std::nullopt;
+    }
+    return auth::UserPasswordRecord{
+        .user_id = row[0] == nullptr ? "" : row[0],
+        .password_hash = row[1] == nullptr ? "" : row[1],
+        .is_active = row[2] != nullptr && std::string(row[2]) == "1",
+    };
+  }
+
   bool UserExistsByLoginIdOrEmail(const std::string& login_id, const std::string& email) const override {
     auto connection = OpenConnection();
     auto result = ExecuteQuery(
@@ -214,6 +247,53 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
             EscapeSqlString(connection.get(), user_id) + "'");
   }
 
+  auth::WebSessionInfo CreateWebSession(
+      const std::string& user_id,
+      const std::string& token_prefix,
+      const std::string& token_hash) override {
+    auto connection = OpenConnection();
+    const auto session_id = GenerateUuidLikeString();
+    ExecuteStatement(
+        connection.get(),
+        "INSERT INTO user_web_sessions "
+        "(session_id, user_id, token_prefix, token_hash, enabled, expires_at) VALUES ('" +
+            EscapeSqlString(connection.get(), session_id) + "', '" +
+            EscapeSqlString(connection.get(), user_id) + "', '" +
+            EscapeSqlString(connection.get(), token_prefix) + "', '" +
+            EscapeSqlString(connection.get(), token_hash) +
+            "', 1, DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 7 DAY))");
+    return auth::WebSessionInfo{
+        .session_id = session_id,
+        .user_id = user_id,
+        .token_prefix = token_prefix,
+        .enabled = true,
+    };
+  }
+
+  void DeleteWebSessionByTokenHash(const std::string& token_hash) override {
+    auto connection = OpenConnection();
+    ExecuteStatement(
+        connection.get(),
+        "UPDATE user_web_sessions SET enabled = 0 WHERE token_hash = '" +
+            EscapeSqlString(connection.get(), token_hash) + "'");
+  }
+
+  std::vector<group::GroupDetails> ListGroups() const override {
+    auto connection = OpenConnection();
+    auto result = ExecuteQuery(
+        connection.get(),
+        "SELECT group_id FROM user_groups ORDER BY id");
+
+    std::vector<group::GroupDetails> groups;
+    MYSQL_ROW row = nullptr;
+    while ((row = mysql_fetch_row(result.get())) != nullptr) {
+      if (row[0] != nullptr) {
+        groups.push_back(LoadGroupDetails(connection.get(), row[0]));
+      }
+    }
+    return groups;
+  }
+
   std::optional<group::GroupSummary> FindGroupSummaryById(const std::string& group_id) const override {
     auto connection = OpenConnection();
     auto result = ExecuteQuery(
@@ -233,6 +313,15 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
         .description = row[2] == nullptr ? std::nullopt : std::optional<std::string>(row[2]),
         .created_by_user_id = row[3] == nullptr ? "" : row[3],
     };
+  }
+
+  std::optional<group::GroupDetails> FindGroupDetailsById(const std::string& group_id) const override {
+    auto connection = OpenConnection();
+    auto summary = FindGroupSummaryById(group_id);
+    if (!summary.has_value()) {
+      return std::nullopt;
+    }
+    return LoadGroupDetails(connection.get(), group_id);
   }
 
   bool GroupExistsByName(const std::string& group_name) const override {

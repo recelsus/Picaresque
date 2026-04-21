@@ -21,9 +21,36 @@ std::string GenerateApiKey() {
   return value;
 }
 
-std::string BuildKeyPrefix(std::string_view api_key) {
-  const std::size_t prefix_length = std::min<std::size_t>(12, api_key.size());
-  return std::string(api_key.substr(0, prefix_length));
+std::string GenerateSessionToken() {
+  static std::mt19937_64 generator(std::random_device{}());
+  static constexpr char kHex[] = "0123456789abcdef";
+
+  std::string value = "ps_";
+  for (int i = 0; i < 64; ++i) {
+    value.push_back(kHex[generator() % 16]);
+  }
+  return value;
+}
+
+std::string BuildPrefix(std::string_view value) {
+  const std::size_t prefix_length = std::min<std::size_t>(12, value.size());
+  return std::string(value.substr(0, prefix_length));
+}
+
+std::string HashValue(std::string_view namespace_prefix, std::string_view value) {
+  const std::string namespaced = std::string(namespace_prefix) + ":" + std::string(value);
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA256(
+      reinterpret_cast<const unsigned char*>(namespaced.data()),
+      namespaced.size(),
+      hash);
+
+  std::ostringstream stream;
+  stream << std::hex << std::setfill('0');
+  for (const auto byte : hash) {
+    stream << std::setw(2) << static_cast<int>(byte);
+  }
+  return stream.str();
 }
 
 }  // namespace
@@ -44,7 +71,7 @@ IssuedApiKey AuthService::IssueUserApiKey(const std::string& user_id) const {
 
   const auto plain_api_key = GenerateApiKey();
   const auto api_key_info =
-      repository_.UpsertApiKey(user_id, BuildKeyPrefix(plain_api_key), HashApiKey(plain_api_key));
+      repository_.UpsertApiKey(user_id, BuildPrefix(plain_api_key), HashApiKey(plain_api_key));
   return {
       .info = api_key_info,
       .plain_api_key = plain_api_key,
@@ -70,19 +97,63 @@ user::UserDetails AuthService::AuthenticateApiKey(const std::string& api_key) co
   return *user;
 }
 
-std::string HashApiKey(std::string_view api_key) {
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256(
-      reinterpret_cast<const unsigned char*>(api_key.data()),
-      api_key.size(),
-      hash);
-
-  std::ostringstream stream;
-  stream << std::hex << std::setfill('0');
-  for (const auto byte : hash) {
-    stream << std::setw(2) << static_cast<int>(byte);
+IssuedWebSession AuthService::LoginWithPassword(
+    const std::string& login_id,
+    const std::string& password) const {
+  if (login_id.empty() || password.empty()) {
+    throw std::runtime_error("invalid_credentials");
   }
-  return stream.str();
+
+  const auto password_record = repository_.FindUserPasswordByLoginId(login_id);
+  if (!password_record.has_value() || !password_record->is_active) {
+    throw std::runtime_error("invalid_credentials");
+  }
+
+  const auto hashed_password = HashPassword(password);
+  if (password_record->password_hash != hashed_password && password_record->password_hash != password) {
+    throw std::runtime_error("invalid_credentials");
+  }
+
+  const auto plain_session_token = GenerateSessionToken();
+  const auto session_info = repository_.CreateWebSession(
+      password_record->user_id,
+      BuildPrefix(plain_session_token),
+      HashSessionToken(plain_session_token));
+  return {
+      .info = session_info,
+      .plain_session_token = plain_session_token,
+  };
+}
+
+user::UserDetails AuthService::AuthenticateWebSession(const std::string& session_token) const {
+  if (session_token.empty()) {
+    throw std::runtime_error("session_required");
+  }
+
+  const auto user = repository_.FindUserDetailsByWebSessionTokenHash(HashSessionToken(session_token));
+  if (!user.has_value()) {
+    throw std::runtime_error("invalid_session");
+  }
+  return *user;
+}
+
+void AuthService::LogoutWebSession(const std::string& session_token) const {
+  if (session_token.empty()) {
+    throw std::runtime_error("session_required");
+  }
+  repository_.DeleteWebSessionByTokenHash(HashSessionToken(session_token));
+}
+
+std::string HashApiKey(std::string_view api_key) {
+  return HashValue("api_key", api_key);
+}
+
+std::string HashPassword(std::string_view password) {
+  return HashValue("password", password);
+}
+
+std::string HashSessionToken(std::string_view session_token) {
+  return HashValue("web_session", session_token);
 }
 
 }  // namespace picaresque::auth

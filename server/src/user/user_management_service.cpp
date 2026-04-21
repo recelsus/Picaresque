@@ -1,6 +1,10 @@
 #include "picaresque/user/user_management_service.hpp"
 
 #include <stdexcept>
+#include <iomanip>
+#include <sstream>
+
+#include <openssl/sha.h>
 
 namespace picaresque::user {
 namespace {
@@ -21,6 +25,24 @@ void ValidateCreateUserCommand(const CreateUserCommand& command) {
   if (command.password.empty()) {
     throw std::runtime_error("password is required");
   }
+}
+
+CreateUserCommand BuildPersistedCreateUserCommand(const CreateUserCommand& command) {
+  auto persisted = command;
+  const std::string namespaced = "password:" + command.password;
+  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA256(
+      reinterpret_cast<const unsigned char*>(namespaced.data()),
+      namespaced.size(),
+      hash);
+
+  std::ostringstream stream;
+  stream << std::hex << std::setfill('0');
+  for (const auto byte : hash) {
+    stream << std::setw(2) << static_cast<int>(byte);
+  }
+  persisted.password = stream.str();
+  return persisted;
 }
 
 }  // namespace
@@ -55,7 +77,7 @@ UserDetails UserManagementService::CreateInitialAdmin(const CreateUserCommand& c
   }
 
   return repository_.CreateUser(
-      command,
+      BuildPersistedCreateUserCommand(command),
       {
           {"*", 99, 99},
       });
@@ -72,7 +94,7 @@ UserDetails UserManagementService::CreateUser(const CreateUserCommand& command) 
     throw std::runtime_error("user_already_exists");
   }
 
-  return repository_.CreateUser(command, {});
+  return repository_.CreateUser(BuildPersistedCreateUserCommand(command), {});
 }
 
 }  // namespace picaresque::user

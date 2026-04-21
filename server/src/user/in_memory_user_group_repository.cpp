@@ -93,6 +93,63 @@ std::optional<UserDetails> InMemoryUserGroupRepository::FindUserDetailsByApiKeyH
   return *user_it;
 }
 
+std::optional<UserDetails> InMemoryUserGroupRepository::FindUserDetailsByWebSessionTokenHash(
+    const std::string& token_hash) const {
+  std::scoped_lock lock(mutex_);
+  const auto hash_it = std::find_if(
+      web_session_hashes_.begin(),
+      web_session_hashes_.end(),
+      [&token_hash](const auto& entry) { return entry.second == token_hash; });
+  if (hash_it == web_session_hashes_.end()) {
+    return std::nullopt;
+  }
+
+  const auto session_it = std::find_if(
+      web_sessions_.begin(),
+      web_sessions_.end(),
+      [&hash_it](const auth::WebSessionInfo& session) {
+        return session.session_id == hash_it->first && session.enabled;
+      });
+  if (session_it == web_sessions_.end()) {
+    return std::nullopt;
+  }
+
+  const auto user_it = std::find_if(
+      users_.begin(),
+      users_.end(),
+      [&session_it](const UserDetails& details) { return details.summary.user_id == session_it->user_id; });
+  if (user_it == users_.end()) {
+    return std::nullopt;
+  }
+  return *user_it;
+}
+
+std::optional<auth::UserPasswordRecord> InMemoryUserGroupRepository::FindUserPasswordByLoginId(
+    const std::string& login_id) const {
+  std::scoped_lock lock(mutex_);
+  const auto user_it = std::find_if(
+      users_.begin(),
+      users_.end(),
+      [&login_id](const UserDetails& details) { return details.summary.login_id == login_id; });
+  if (user_it == users_.end()) {
+    return std::nullopt;
+  }
+
+  const auto password_it = std::find_if(
+      password_hashes_.begin(),
+      password_hashes_.end(),
+      [&user_it](const auto& entry) { return entry.first == user_it->summary.user_id; });
+  if (password_it == password_hashes_.end()) {
+    return std::nullopt;
+  }
+
+  return auth::UserPasswordRecord{
+      .user_id = user_it->summary.user_id,
+      .password_hash = password_it->second,
+      .is_active = user_it->summary.is_active,
+  };
+}
+
 bool InMemoryUserGroupRepository::UserExistsByLoginIdOrEmail(
     const std::string& login_id,
     const std::string& email) const {
@@ -138,6 +195,7 @@ UserDetails InMemoryUserGroupRepository::CreateUser(
   };
 
   users_.push_back(user);
+  password_hashes_.push_back({user.summary.user_id, command.password});
   return user;
 }
 
@@ -200,6 +258,59 @@ void InMemoryUserGroupRepository::DeleteApiKey(const std::string& user_id) {
       api_key_hashes_.end());
 }
 
+auth::WebSessionInfo InMemoryUserGroupRepository::CreateWebSession(
+    const std::string& user_id,
+    const std::string& token_prefix,
+    const std::string& token_hash) {
+  std::scoped_lock lock(mutex_);
+
+  const auto user_it = std::find_if(
+      users_.begin(),
+      users_.end(),
+      [&user_id](const UserDetails& details) { return details.summary.user_id == user_id; });
+  if (user_it == users_.end()) {
+    throw std::runtime_error("user_not_found");
+  }
+
+  const auth::WebSessionInfo info{
+      .session_id = BuildNextSessionId(),
+      .user_id = user_id,
+      .token_prefix = token_prefix,
+      .enabled = true,
+  };
+  web_sessions_.push_back(info);
+  web_session_hashes_.push_back({info.session_id, token_hash});
+  return info;
+}
+
+void InMemoryUserGroupRepository::DeleteWebSessionByTokenHash(const std::string& token_hash) {
+  std::scoped_lock lock(mutex_);
+  const auto hash_it = std::find_if(
+      web_session_hashes_.begin(),
+      web_session_hashes_.end(),
+      [&token_hash](const auto& entry) { return entry.second == token_hash; });
+  if (hash_it == web_session_hashes_.end()) {
+    return;
+  }
+
+  const auto session_id = hash_it->first;
+  for (auto& session : web_sessions_) {
+    if (session.session_id == session_id) {
+      session.enabled = false;
+    }
+  }
+}
+
+std::vector<group::GroupDetails> InMemoryUserGroupRepository::ListGroups() const {
+  std::scoped_lock lock(mutex_);
+  std::vector<group::GroupDetails> groups;
+  groups.reserve(groups_.size());
+  for (const auto& group : groups_) {
+    groups.push_back(BuildGroupDetails(group.group_id));
+  }
+  return groups;
+}
+
 std::optional<group::GroupSummary> InMemoryUserGroupRepository::FindGroupSummaryById(
     const std::string& group_id) const {
   std::scoped_lock lock(mutex_);
@@ -211,6 +322,19 @@ std::optional<group::GroupSummary> InMemoryUserGroupRepository::FindGroupSummary
     return std::nullopt;
   }
   return *it;
+}
+
+std::optional<group::GroupDetails> InMemoryUserGroupRepository::FindGroupDetailsById(
+    const std::string& group_id) const {
+  std::scoped_lock lock(mutex_);
+  const auto it = std::find_if(
+      groups_.begin(),
+      groups_.end(),
+      [&group_id](const group::GroupSummary& group) { return group.group_id == group_id; });
+  if (it == groups_.end()) {
+    return std::nullopt;
+  }
+  return BuildGroupDetails(group_id);
 }
 
 bool InMemoryUserGroupRepository::GroupExistsByName(const std::string& group_name) const {
@@ -387,6 +511,12 @@ std::string InMemoryUserGroupRepository::BuildNextGroupId() {
 std::string InMemoryUserGroupRepository::BuildNextInvitationId() {
   std::ostringstream stream;
   stream << "invitation_" << next_invitation_id_++;
+  return stream.str();
+}
+
+std::string InMemoryUserGroupRepository::BuildNextSessionId() {
+  std::ostringstream stream;
+  stream << "session_" << next_session_id_++;
   return stream.str();
 }
 

@@ -38,6 +38,21 @@ std::optional<permission::Role> ParseRole(const std::string& value) {
   return std::nullopt;
 }
 
+drogon::HttpResponsePtr BuildErrorResponse(
+    const drogon::HttpRequestPtr& request,
+    drogon::HttpStatusCode status_code,
+    const std::string& code,
+    const std::string& message) {
+  Json::Value error(Json::objectValue);
+  error["meta"] = BuildMeta(request->getHeader("x-request-id"));
+  error["error"]["code"] = code;
+  error["error"]["message"] = message;
+
+  auto response = drogon::HttpResponse::newHttpJsonResponse(error);
+  response->setStatusCode(status_code);
+  return response;
+}
+
 }  // namespace
 
 class UserManagementController : public drogon::HttpController<UserManagementController> {
@@ -47,6 +62,9 @@ class UserManagementController : public drogon::HttpController<UserManagementCon
   METHOD_LIST_BEGIN
   ADD_METHOD_TO(UserManagementController::GetSetupStatus, "/api/v1/setup/status", drogon::Get);
   ADD_METHOD_TO(UserManagementController::CreateInitialAdmin, "/api/v1/setup/admin", drogon::Post);
+  ADD_METHOD_TO(UserManagementController::CreateUser, "/api/v1/users", drogon::Post);
+  ADD_METHOD_TO(UserManagementController::ListUsers, "/api/v1/users", drogon::Get);
+  ADD_METHOD_TO(UserManagementController::GetUser, "/api/v1/users/{1}", drogon::Get);
   ADD_METHOD_TO(UserManagementController::CreateUser, "/api/v1/admin/users", drogon::Post);
   ADD_METHOD_TO(UserManagementController::ListUsers, "/api/v1/admin/users", drogon::Get);
   ADD_METHOD_TO(UserManagementController::GetUser, "/api/v1/admin/users/{1}", drogon::Get);
@@ -136,7 +154,7 @@ class UserManagementController : public drogon::HttpController<UserManagementCon
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
     try {
-      static_cast<void>(BuildRequestContext(request, false));
+      static_cast<void>(BuildRequestContext(request, true));
     } catch (const std::runtime_error& error) {
       callback(BuildRequestContextErrorResponse(request, error.what()));
       return;
@@ -175,37 +193,37 @@ class UserManagementController : public drogon::HttpController<UserManagementCon
   void CreateUser(
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
+    RequestContext context;
     try {
-      static_cast<void>(BuildRequestContext(request, false));
+      context = BuildRequestContext(request, true);
     } catch (const std::runtime_error& error) {
       callback(BuildRequestContextErrorResponse(request, error.what()));
       return;
     }
 
+    if (context.authenticated_user->summary.role != permission::Role::Admin) {
+      callback(BuildErrorResponse(request, drogon::k403Forbidden, "forbidden", "operation is forbidden"));
+      return;
+    }
+
     const auto json = request->getJsonObject();
     if (!json) {
-      Json::Value error(Json::objectValue);
-      error["meta"] = BuildMeta(request->getHeader("x-request-id"));
-      error["error"]["code"] = "invalid_json";
-      error["error"]["message"] = "request body must be valid json";
-
-      auto response = drogon::HttpResponse::newHttpJsonResponse(error);
-      response->setStatusCode(drogon::k400BadRequest);
-      callback(response);
+      callback(BuildErrorResponse(
+          request,
+          drogon::k400BadRequest,
+          "invalid_json",
+          "request body must be valid json"));
       return;
     }
 
     const auto role_text = ReadStringField(*json, "role", "role", "member");
     const auto role = ParseRole(role_text);
     if (!role.has_value()) {
-      Json::Value error(Json::objectValue);
-      error["meta"] = BuildMeta(request->getHeader("x-request-id"));
-      error["error"]["code"] = "invalid_role";
-      error["error"]["message"] = "role must be admin, owner, or member";
-
-      auto response = drogon::HttpResponse::newHttpJsonResponse(error);
-      response->setStatusCode(drogon::k400BadRequest);
-      callback(response);
+      callback(BuildErrorResponse(
+          request,
+          drogon::k400BadRequest,
+          "invalid_role",
+          "role must be admin, owner, or member"));
       return;
     }
 
@@ -263,7 +281,7 @@ class UserManagementController : public drogon::HttpController<UserManagementCon
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
       const std::string& user_id) const {
     try {
-      static_cast<void>(BuildRequestContext(request, false));
+      static_cast<void>(BuildRequestContext(request, true));
     } catch (const std::runtime_error& error) {
       callback(BuildRequestContextErrorResponse(request, error.what()));
       return;

@@ -24,13 +24,17 @@ namespace {
 drogon::HttpRequestPtr BuildRequest(
     const std::string& path,
     const std::string& client_ip,
-    const std::string& api_key = "") {
+    const std::string& api_key = "",
+    const std::string& web_session = "") {
   auto request = drogon::HttpRequest::newHttpRequest();
   request->setPath(path);
   request->addHeader("X-Request-Id", "request_context_test");
   request->addHeader("X-Real-IP", client_ip);
   if (!api_key.empty()) {
     request->addHeader("X-API-Key", api_key);
+  }
+  if (!web_session.empty()) {
+    request->addHeader("X-Web-Session", web_session);
   }
   return request;
 }
@@ -58,6 +62,7 @@ int main() {
       .role = permission::Role::Member,
   });
   const auto issued_key = auth_service.IssueUserApiKey(admin.summary.user_id);
+  const auto issued_session = auth_service.LoginWithPassword("admin", "change-me");
 
   const p_access::InMemoryAccessRepository access_repository(
       {
@@ -117,6 +122,17 @@ int main() {
   }
 
   {
+    const auto context = http::BuildRequestContext(
+        BuildRequest("/api/v1/groups", "203.0.113.10", "", issued_session.plain_session_token),
+        true,
+        access_repository,
+        deny_by_default,
+        user_repository);
+    assert(context.authenticated_user.has_value());
+    assert(context.authenticated_user->summary.user_id == admin.summary.user_id);
+  }
+
+  {
     bool failed = false;
     try {
       static_cast<void>(http::BuildRequestContext(
@@ -126,7 +142,7 @@ int main() {
           deny_by_default,
           user_repository));
     } catch (const std::runtime_error& error) {
-      failed = std::string(error.what()) == "api_key_required";
+      failed = std::string(error.what()) == "auth_required";
     }
     assert(failed);
   }

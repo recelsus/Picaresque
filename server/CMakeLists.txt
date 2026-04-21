@@ -95,7 +95,11 @@ set_target_properties(picaresque_user PROPERTIES
   CXX_EXTENSIONS OFF
 )
 
-target_link_libraries(picaresque_user PUBLIC picaresque_permission)
+target_link_libraries(picaresque_user
+  PUBLIC
+    OpenSSL::Crypto
+    picaresque_permission
+)
 
 add_library(picaresque_auth
   src/auth/auth_service.cpp

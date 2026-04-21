@@ -14,6 +14,10 @@ class InMemoryUserGroupRepository final : public UserGroupRepository {
   std::vector<UserSummary> ListUsers(const UserListFilter& filter) const override;
   std::optional<UserDetails> FindUserDetailsById(const std::string& user_id) const override;
   std::optional<UserDetails> FindUserDetailsByApiKeyHash(const std::string& key_hash) const override;
+  std::optional<UserDetails> FindUserDetailsByWebSessionTokenHash(
+      const std::string& token_hash) const override;
+  std::optional<auth::UserPasswordRecord> FindUserPasswordByLoginId(
+      const std::string& login_id) const override;
   bool UserExistsByLoginIdOrEmail(const std::string& login_id, const std::string& email) const override;
   std::optional<auth::ApiKeyInfo> FindApiKeyInfoByUserId(const std::string& user_id) const override;
   UserDetails CreateUser(
@@ -24,7 +28,14 @@ class InMemoryUserGroupRepository final : public UserGroupRepository {
       const std::string& key_prefix,
       const std::string& key_hash) override;
   void DeleteApiKey(const std::string& user_id) override;
+  auth::WebSessionInfo CreateWebSession(
+      const std::string& user_id,
+      const std::string& token_prefix,
+      const std::string& token_hash) override;
+  void DeleteWebSessionByTokenHash(const std::string& token_hash) override;
+  std::vector<group::GroupDetails> ListGroups() const override;
   std::optional<group::GroupSummary> FindGroupSummaryById(const std::string& group_id) const override;
+  std::optional<group::GroupDetails> FindGroupDetailsById(const std::string& group_id) const override;
   bool GroupExistsByName(const std::string& group_name) const override;
   bool HasActiveMembership(const std::string& group_id, const std::string& user_id) const override;
   std::optional<group::GroupInvitation> FindInvitationById(const std::string& invitation_id) const override;
@@ -45,6 +56,7 @@ class InMemoryUserGroupRepository final : public UserGroupRepository {
   std::string BuildNextUserId();
   std::string BuildNextGroupId();
   std::string BuildNextInvitationId();
+  std::string BuildNextSessionId();
   group::GroupDetails BuildGroupDetails(const std::string& group_id) const;
   UserDetails* FindMutableUserById(const std::string& user_id);
   group::GroupSummary* FindMutableGroupById(const std::string& group_id);
@@ -54,11 +66,15 @@ class InMemoryUserGroupRepository final : public UserGroupRepository {
   std::vector<UserDetails> users_;
   std::vector<auth::ApiKeyInfo> api_keys_;
   std::vector<std::pair<std::string, std::string>> api_key_hashes_;
+  std::vector<auth::WebSessionInfo> web_sessions_;
+  std::vector<std::pair<std::string, std::string>> web_session_hashes_;
+  std::vector<std::pair<std::string, std::string>> password_hashes_;
   std::vector<group::GroupSummary> groups_;
   std::vector<group::GroupInvitation> invitations_;
   std::size_t next_user_id_ = 1;
   std::size_t next_group_id_ = 1;
   std::size_t next_invitation_id_ = 1;
+  std::size_t next_session_id_ = 1;
 };
 
 }  // namespace picaresque::user

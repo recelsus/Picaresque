@@ -24,6 +24,30 @@ int main() {
 
   assert(!auth_service.GetUserApiKey(created_user.summary.user_id).has_value());
 
+  const auto issued_session = auth_service.LoginWithPassword("admin", "change-me");
+  assert(!issued_session.plain_session_token.empty());
+  assert(issued_session.info.user_id == created_user.summary.user_id);
+
+  const auto session_user = auth_service.AuthenticateWebSession(issued_session.plain_session_token);
+  assert(session_user.summary.user_id == created_user.summary.user_id);
+
+  bool invalid_login_rejected = false;
+  try {
+    static_cast<void>(auth_service.LoginWithPassword("admin", "wrong-password"));
+  } catch (const std::runtime_error& error) {
+    invalid_login_rejected = std::string(error.what()) == "invalid_credentials";
+  }
+  assert(invalid_login_rejected);
+
+  auth_service.LogoutWebSession(issued_session.plain_session_token);
+  bool logged_out_session_rejected = false;
+  try {
+    static_cast<void>(auth_service.AuthenticateWebSession(issued_session.plain_session_token));
+  } catch (const std::runtime_error&) {
+    logged_out_session_rejected = true;
+  }
+  assert(logged_out_session_rejected);
+
   const auto issued = auth_service.IssueUserApiKey(created_user.summary.user_id);
   assert(!issued.plain_api_key.empty());
   assert(issued.info.user_id == created_user.summary.user_id);

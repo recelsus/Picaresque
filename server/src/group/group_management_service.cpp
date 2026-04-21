@@ -22,6 +22,18 @@ permission::User BuildPermissionUser(const user::UserDetails& details) {
 GroupManagementService::GroupManagementService(user::UserGroupRepository& repository)
     : repository_(repository) {}
 
+std::vector<GroupDetails> GroupManagementService::ListGroups() const {
+  return repository_.ListGroups();
+}
+
+GroupDetails GroupManagementService::GetGroupDetails(const std::string& group_id) const {
+  const auto details = repository_.FindGroupDetailsById(group_id);
+  if (!details.has_value()) {
+    throw std::runtime_error("group_not_found");
+  }
+  return *details;
+}
+
 GroupDetails GroupManagementService::CreateGroup(const CreateGroupCommand& command) const {
   const auto actor = repository_.FindUserDetailsById(command.actor_user_id);
   if (!actor.has_value()) {

@@ -32,6 +32,26 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
   GroupManagementController() : service_(user::GetMySqlUserGroupRepository()) {}
 
   METHOD_LIST_BEGIN
+  ADD_METHOD_TO(GroupManagementController::ListGroups, "/api/v1/groups", drogon::Get);
+  ADD_METHOD_TO(GroupManagementController::CreateGroup, "/api/v1/groups", drogon::Post);
+  ADD_METHOD_TO(GroupManagementController::ListGroupMembers, "/api/v1/groups/{1}/members", drogon::Get);
+  ADD_METHOD_TO(
+      GroupManagementController::InviteUser,
+      "/api/v1/groups/{1}/invitations",
+      drogon::Post);
+  ADD_METHOD_TO(
+      GroupManagementController::AcceptInvitation,
+      "/api/v1/invitations/{1}/accept",
+      drogon::Post);
+  ADD_METHOD_TO(
+      GroupManagementController::AssignScopedPermissionByPath,
+      "/api/v1/groups/{1}/members/{2}/permissions",
+      drogon::Put);
+  ADD_METHOD_TO(
+      GroupManagementController::AssignOwnerGroupByPath,
+      "/api/v1/groups/{1}/owners/{2}",
+      drogon::Put);
+  ADD_METHOD_TO(GroupManagementController::ListGroups, "/api/v1/admin/groups", drogon::Get);
   ADD_METHOD_TO(GroupManagementController::CreateGroup, "/api/v1/admin/groups", drogon::Post);
   ADD_METHOD_TO(
       GroupManagementController::InviteUser,
@@ -50,6 +70,53 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
       "/api/v1/admin/groups/{1}/owners",
       drogon::Post);
   METHOD_LIST_END
+
+  void ListGroups(
+      const drogon::HttpRequestPtr& request,
+      std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
+    try {
+      static_cast<void>(BuildRequestContext(request, true));
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
+    Json::Value body(Json::objectValue);
+    body["meta"] = BuildMeta(request->getHeader("x-request-id"));
+    Json::Value data(Json::arrayValue);
+    for (const auto& group : service_.ListGroups()) {
+      data.append(ToJson(group));
+    }
+    body["data"] = data;
+    callback(drogon::HttpResponse::newHttpJsonResponse(body));
+  }
+
+  void ListGroupMembers(
+      const drogon::HttpRequestPtr& request,
+      std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+      const std::string& group_id) const {
+    try {
+      static_cast<void>(BuildRequestContext(request, true));
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
+    try {
+      const auto group = service_.GetGroupDetails(group_id);
+      Json::Value body(Json::objectValue);
+      body["meta"] = BuildMeta(request->getHeader("x-request-id"));
+      Json::Value members(Json::arrayValue);
+      for (const auto& user_id : group.member_user_ids) {
+        members.append(user_id);
+      }
+      body["data"]["group_id"] = group.summary.group_id;
+      body["data"]["member_user_ids"] = members;
+      callback(drogon::HttpResponse::newHttpJsonResponse(body));
+    } catch (const std::runtime_error& error) {
+      callback(MapError(request, error.what()));
+    }
+  }
 
   void CreateGroup(
       const drogon::HttpRequestPtr& request,
@@ -212,6 +279,14 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     }
   }
 
+  void AssignScopedPermissionByPath(
+      const drogon::HttpRequestPtr& request,
+      std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+      const std::string& group_id,
+      const std::string& user_id) const {
+    AssignScopedPermission(request, std::move(callback), user_id, group_id);
+  }
+
   void AssignOwnerGroup(
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
@@ -237,6 +312,35 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     group::AssignOwnerGroupCommand command{
         .actor_user_id = context.authenticated_user->summary.user_id,
         .target_user_id = (*json).get("target_user_id", "").asString(),
+        .group_id = group_id,
+    };
+
+    try {
+      Json::Value body(Json::objectValue);
+      body["meta"] = BuildMeta(request->getHeader("x-request-id"));
+      body["data"] = ToJson(service_.AssignOwnerGroup(command));
+      callback(drogon::HttpResponse::newHttpJsonResponse(body));
+    } catch (const std::runtime_error& error) {
+      callback(MapError(request, error.what()));
+    }
+  }
+
+  void AssignOwnerGroupByPath(
+      const drogon::HttpRequestPtr& request,
+      std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+      const std::string& group_id,
+      const std::string& user_id) const {
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
+    group::AssignOwnerGroupCommand command{
+        .actor_user_id = context.authenticated_user->summary.user_id,
+        .target_user_id = user_id,
         .group_id = group_id,
     };
 

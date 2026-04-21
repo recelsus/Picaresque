@@ -19,12 +19,21 @@ class UserGroupRepository {
   virtual std::vector<UserSummary> ListUsers(const UserListFilter& filter) const = 0;
   virtual std::optional<UserDetails> FindUserDetailsById(const std::string& user_id) const = 0;
   virtual std::optional<UserDetails> FindUserDetailsByApiKeyHash(const std::string& key_hash) const = 0;
+  virtual std::optional<UserDetails> FindUserDetailsByWebSessionTokenHash(
+      const std::string& token_hash) const = 0;
+  virtual std::optional<auth::UserPasswordRecord> FindUserPasswordByLoginId(
+      const std::string& login_id) const = 0;
   virtual bool UserExistsByLoginIdOrEmail(
       const std::string& login_id,
       const std::string& email) const = 0;
 
   // API key persistence. Plain keys are never stored by repository implementations.
   virtual std::optional<auth::ApiKeyInfo> FindApiKeyInfoByUserId(const std::string& user_id) const = 0;
+  virtual auth::WebSessionInfo CreateWebSession(
+      const std::string& user_id,
+      const std::string& token_prefix,
+      const std::string& token_hash) = 0;
+  virtual void DeleteWebSessionByTokenHash(const std::string& token_hash) = 0;
 
   // User aggregate writes.
   virtual UserDetails CreateUser(
@@ -37,7 +46,9 @@ class UserGroupRepository {
   virtual void DeleteApiKey(const std::string& user_id) = 0;
 
   // Group facts used by service-level authorization and membership checks.
+  virtual std::vector<group::GroupDetails> ListGroups() const = 0;
   virtual std::optional<group::GroupSummary> FindGroupSummaryById(const std::string& group_id) const = 0;
+  virtual std::optional<group::GroupDetails> FindGroupDetailsById(const std::string& group_id) const = 0;
   virtual bool GroupExistsByName(const std::string& group_name) const = 0;
   virtual bool HasActiveMembership(
       const std::string& group_id,

@@ -14,6 +14,8 @@
 namespace picaresque::http {
 namespace {
 
+constexpr const char* kWebSessionCookieName = "picaresque_session";
+
 std::string ResolveClientIp(const drogon::HttpRequestPtr& request) {
   const auto forwarded_for = request->getHeader("x-forwarded-for");
   if (!forwarded_for.empty()) {
@@ -35,6 +37,14 @@ access::AccessSurface ResolveSurface(const drogon::HttpRequestPtr& request) {
     return access::AccessSurface::RestApi;
   }
   return access::AccessSurface::Web;
+}
+
+std::string ResolveWebSessionToken(const drogon::HttpRequestPtr& request) {
+  const auto header_token = request->getHeader("x-web-session");
+  if (!header_token.empty()) {
+    return header_token;
+  }
+  return request->getCookie(kWebSessionCookieName);
 }
 
 }  // namespace
@@ -84,8 +94,15 @@ RequestContext BuildRequestContext(
     return context;
   }
 
+  const auto web_session_token = ResolveWebSessionToken(request);
+  if (!web_session_token.empty()) {
+    auth::AuthService auth_service(user_repository);
+    context.authenticated_user = auth_service.AuthenticateWebSession(web_session_token);
+    return context;
+  }
+
   if (require_api_key) {
-    throw std::runtime_error("api_key_required");
+    throw std::runtime_error("auth_required");
   }
 
   return context;
@@ -105,7 +122,8 @@ drogon::HttpResponsePtr BuildRequestContextErrorResponse(
     return response;
   }
 
-  if (error_code == "api_key_required" || error_code == "invalid_api_key") {
+  if (error_code == "auth_required" || error_code == "api_key_required" || error_code == "invalid_api_key" ||
+      error_code == "session_required" || error_code == "invalid_session") {
     error["error"]["code"] = error_code;
     error["error"]["message"] = error_code;
     auto response = drogon::HttpResponse::newHttpJsonResponse(error);
