@@ -1,6 +1,7 @@
 #include <cassert>
 
 #include "picaresque/group/group_management_service.hpp"
+#include "picaresque/user/in_memory_user_group_repository.hpp"
 #include "picaresque/user/user_management_service.hpp"
 
 namespace group = picaresque::group;
@@ -8,8 +9,9 @@ namespace user = picaresque::user;
 namespace permission = picaresque::permission;
 
 int main() {
-  const user::UserManagementService user_service;
-  const group::GroupManagementService group_service;
+  user::InMemoryUserGroupRepository repository;
+  const user::UserManagementService user_service(repository);
+  const group::GroupManagementService group_service(repository);
 
   const auto admin = user_service.CreateInitialAdmin({
       .login_id = "admin",
