@@ -63,9 +63,6 @@ void ValidateUser(const User& user) {
     if (!scoped_names.insert(scope.name).second) {
       throw ValidationError("scoped_permissions must not contain duplicate names");
     }
-    if (scope.name == "*" && user.role != Role::Admin) {
-      throw ValidationError("wildcard scope can only be assigned to admin users");
-    }
   }
 }
 

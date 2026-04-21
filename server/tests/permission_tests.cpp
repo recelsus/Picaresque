@@ -141,21 +141,37 @@ int main() {
   }
 
   {
-    bool failed = false;
-    try {
-      permission::ValidateUser(permission::User{
-          .user_id = "user_invalid",
-          .user_name = "Invalid User",
-          .role = permission::Role::Member,
-          .owned_groups = {},
-          .scoped_permissions = {
-              {"*", 30, 30},
-          },
-      });
-    } catch (const permission::ValidationError&) {
-      failed = true;
-    }
-    assert(failed);
+    permission::ValidateUser(permission::User{
+        .user_id = "user_with_wildcard",
+        .user_name = "Wildcard User",
+        .role = permission::Role::Member,
+        .owned_groups = {},
+        .scoped_permissions = {
+            {"*", 30, 30},
+        },
+    });
+  }
+
+  {
+    const permission::User wildcard_target{
+        .user_id = "user_wildcard_target",
+        .user_name = "Wildcard Target",
+        .role = permission::Role::Member,
+        .owned_groups = {},
+        .scoped_permissions = {},
+    };
+
+    assert(permission::CanAssignScopedPermission(
+        admin_user,
+        wildcard_target,
+        "group_alpha",
+        {"*", 30, 30}));
+
+    assert(!permission::CanAssignScopedPermission(
+        owner_user,
+        wildcard_target,
+        "group_alpha",
+        {"*", 30, 30}));
   }
 
   assert(permission::CanAssignOwnerRole(admin_user));
