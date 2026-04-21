@@ -125,6 +125,14 @@ int main() {
         {"group_alpha", 30, 30},
     };
     assert(permission::CanReadAndWrite(member_user, requirements));
+
+    const auto result = permission::EvaluateReadAndWrite(member_user, requirements);
+    assert(result.IsAllowed());
+    assert(result.reason == permission::PermissionCheckReason::RequirementSatisfied);
+    assert(result.matched_requirement.has_value());
+    assert(result.matched_requirement->group_id == "group_alpha");
+    assert(result.resolved_permission.has_value());
+    assert(result.resolved_permission->source == permission::PermissionSource::DirectScope);
   }
 
   {
@@ -143,6 +151,12 @@ int main() {
         {"group_beta", 30, 30},
     };
     assert(!permission::CanReadAndWrite(member_user, requirements));
+
+    const auto result = permission::EvaluateReadAndWrite(member_user, requirements);
+    assert(!result.IsAllowed());
+    assert(result.reason == permission::PermissionCheckReason::RequirementNotSatisfied);
+    assert(!result.matched_requirement.has_value());
+    assert(result.resolved_permission.has_value());
   }
 
   {
@@ -159,6 +173,10 @@ int main() {
     assert(permission::CanRead(member_user, requirements));
     assert(permission::CanWrite(member_user, requirements));
     assert(permission::CanReadAndWrite(member_user, requirements));
+
+    const auto result = permission::EvaluateRead(member_user, requirements);
+    assert(result.IsAllowed());
+    assert(result.reason == permission::PermissionCheckReason::NoRequirement);
   }
 
   {
@@ -186,31 +204,18 @@ int main() {
   }
 
   {
-    const permission::User target_member{
-        .user_id = "user_target",
-        .user_name = "Target User",
-        .role = permission::Role::Member,
-        .owned_groups = {},
-        .scoped_permissions = {
-            {"group_alpha", 10, 10},
-        },
-    };
-
     assert(permission::CanAssignScopedPermission(
         owner_user,
-        target_member,
         "group_alpha",
         {"group_alpha", 90, 90}));
 
     assert(!permission::CanAssignScopedPermission(
         owner_user,
-        target_member,
         "group_alpha",
         {"group_alpha", 99, 99}));
 
     assert(permission::CanAssignScopedPermission(
         admin_user,
-        target_member,
         "group_alpha",
         {"group_alpha", 99, 99}));
   }
@@ -226,41 +231,20 @@ int main() {
         },
     };
 
-    const permission::User target_member{
-        .user_id = "user_target_beta",
-        .user_name = "Target Beta User",
-        .role = permission::Role::Member,
-        .owned_groups = {},
-        .scoped_permissions = {
-            {"group_beta", 10, 10},
-        },
-    };
-
     assert(permission::CanAssignScopedPermission(
         rw90_member,
-        target_member,
         "group_beta",
         {"group_beta", 90, 90}));
 
     assert(!permission::CanAssignScopedPermission(
         rw90_member,
-        target_member,
         "group_beta",
         {"group_beta", 99, 99}));
   }
 
   {
-    const permission::User outsider{
-        .user_id = "user_outsider",
-        .user_name = "Outsider User",
-        .role = permission::Role::Member,
-        .owned_groups = {},
-        .scoped_permissions = {},
-    };
-
-    assert(!permission::CanAssignScopedPermission(
+    assert(permission::CanAssignScopedPermission(
         owner_user,
-        outsider,
         "group_alpha",
         {"group_alpha", 30, 30}));
   }
@@ -293,23 +277,13 @@ int main() {
   }
 
   {
-    const permission::User wildcard_target{
-        .user_id = "user_wildcard_target",
-        .user_name = "Wildcard Target",
-        .role = permission::Role::Member,
-        .owned_groups = {},
-        .scoped_permissions = {},
-    };
-
     assert(permission::CanAssignScopedPermission(
         admin_user,
-        wildcard_target,
         "group_alpha",
         {"*", 30, 30}));
 
     assert(!permission::CanAssignScopedPermission(
         owner_user,
-        wildcard_target,
         "group_alpha",
         {"*", 30, 30}));
   }

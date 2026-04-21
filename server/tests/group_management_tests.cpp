@@ -1,5 +1,7 @@
 #include <cassert>
 #include <algorithm>
+#include <stdexcept>
+#include <string>
 
 #include "picaresque/group/group_management_service.hpp"
 #include "picaresque/permission/api.hpp"
@@ -39,6 +41,14 @@ int main() {
       .role = permission::Role::Owner,
   });
 
+  const auto outsider = user_service.CreateUser({
+      .login_id = "outsider1",
+      .user_name = "Outsider One",
+      .email = "outsider1@example.local",
+      .password = "change-me",
+      .role = permission::Role::Member,
+  });
+
   const auto created_group = group_service.CreateGroup({
       .actor_user_id = admin.summary.user_id,
       .group_name = "group-alpha",
@@ -73,6 +83,26 @@ int main() {
   });
   assert(assigned_permission.read == 60);
   assert(assigned_permission.write == 60);
+
+  {
+    bool failed = false;
+    try {
+      group_service.AssignScopedPermission({
+          .actor_user_id = admin.summary.user_id,
+          .target_user_id = outsider.summary.user_id,
+          .group_id = created_group.summary.group_id,
+          .scoped_permission =
+              {
+                  .group_id = created_group.summary.group_id,
+                  .read = 30,
+                  .write = 30,
+              },
+      });
+    } catch (const std::runtime_error& error) {
+      failed = std::string(error.what()) == "target_not_group_member";
+    }
+    assert(failed);
+  }
 
   const auto updated_group = group_service.AssignOwnerGroup({
       .actor_user_id = admin.summary.user_id,

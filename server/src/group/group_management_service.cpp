@@ -95,11 +95,10 @@ permission::ScopedPermission GroupManagementService::AssignScopedPermission(
     const AssignScopedPermissionCommand& command) const {
   const auto actor = repository_.FindUserDetailsById(command.actor_user_id);
   const auto target = repository_.FindUserDetailsById(command.target_user_id);
-  const auto group = repository_.FindGroupSummaryById(command.group_id);
   if (!actor.has_value() || !target.has_value()) {
     throw std::runtime_error("user_not_found");
   }
-  if (!group.has_value()) {
+  if (command.group_id != "*" && !repository_.FindGroupSummaryById(command.group_id).has_value()) {
     throw std::runtime_error("group_not_found");
   }
 
@@ -107,7 +106,6 @@ permission::ScopedPermission GroupManagementService::AssignScopedPermission(
 
   if (!permission::CanAssignScopedPermission(
           BuildPermissionUser(*actor),
-          BuildPermissionUser(*target),
           command.group_id,
           command.scoped_permission)) {
     throw std::runtime_error("forbidden");

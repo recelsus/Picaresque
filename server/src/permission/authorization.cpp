@@ -41,7 +41,6 @@ bool CanInviteToGroup(const User& actor, const std::string& group_id) {
 
 bool CanAssignScopedPermission(
     const User& actor,
-    const User& target,
     const std::string& group_id,
     const ScopedPermission& assignment) {
   if (assignment.group_id == "*") {
@@ -49,10 +48,6 @@ bool CanAssignScopedPermission(
   }
 
   if (assignment.group_id != group_id) {
-    return false;
-  }
-
-  if (!IsMemberOfGroup(target, group_id)) {
     return false;
   }
 
