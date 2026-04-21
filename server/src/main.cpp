@@ -1,7 +1,26 @@
 #include <drogon/drogon.h>
 
+#include <filesystem>
+
+namespace {
+
+std::filesystem::path ResolveConfigPath() {
+  if (std::filesystem::exists("config/config.local.json")) {
+    return "config/config.local.json";
+  }
+  if (std::filesystem::exists("server/config/config.local.json")) {
+    return "server/config/config.local.json";
+  }
+  if (std::filesystem::exists("config/config.example.json")) {
+    return "config/config.example.json";
+  }
+  return "server/config/config.example.json";
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
-  drogon::app().loadConfigFile("config/config.example.json");
+  drogon::app().loadConfigFile(ResolveConfigPath().string());
   drogon::app().registerHandler(
       "/healthz",
       [](const drogon::HttpRequestPtr&,

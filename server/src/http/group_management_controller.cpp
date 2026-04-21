@@ -3,7 +3,9 @@
 
 #include "picaresque/group/group_management_service.hpp"
 #include "picaresque/http/json_serialization.hpp"
+#include "picaresque/http/request_context.hpp"
 #include "picaresque/permission/errors.hpp"
+#include "../user/mysql_user_group_repository.hpp"
 
 namespace picaresque::http {
 namespace {
@@ -27,6 +29,8 @@ drogon::HttpResponsePtr BuildErrorResponse(
 
 class GroupManagementController : public drogon::HttpController<GroupManagementController> {
  public:
+  GroupManagementController() : service_(user::GetMySqlUserGroupRepository()) {}
+
   METHOD_LIST_BEGIN
   ADD_METHOD_TO(GroupManagementController::CreateGroup, "/api/v1/admin/groups", drogon::Post);
   ADD_METHOD_TO(
@@ -50,6 +54,14 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
   void CreateGroup(
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback) const {
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
     const auto json = request->getJsonObject();
     if (!json) {
       callback(BuildErrorResponse(
@@ -61,8 +73,8 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     }
 
     group::CreateGroupCommand command{
-        .actor_user_id = (*json).get("actorUserId", "").asString(),
-        .group_name = (*json).get("groupName", "").asString(),
+        .actor_user_id = context.authenticated_user->summary.user_id,
+        .group_name = (*json).get("group_name", "").asString(),
         .description = (*json).isMember("description")
             ? std::optional<std::string>((*json)["description"].asString())
             : std::nullopt,
@@ -85,6 +97,14 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
       const std::string& group_id) const {
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
     const auto json = request->getJsonObject();
     if (!json) {
       callback(BuildErrorResponse(
@@ -96,9 +116,9 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     }
 
     group::InviteUserCommand command{
-        .actor_user_id = (*json).get("actorUserId", "").asString(),
+        .actor_user_id = context.authenticated_user->summary.user_id,
         .group_id = group_id,
-        .invited_user_id = (*json).get("invitedUserId", "").asString(),
+        .invited_user_id = (*json).get("invited_user_id", "").asString(),
     };
 
     try {
@@ -118,18 +138,16 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
       const std::string& invitation_id) const {
-    const auto json = request->getJsonObject();
-    if (!json) {
-      callback(BuildErrorResponse(
-          request,
-          drogon::k400BadRequest,
-          "invalid_json",
-          "request body must be valid json"));
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
       return;
     }
 
     group::AcceptInvitationCommand command{
-        .actor_user_id = (*json).get("actorUserId", "").asString(),
+        .actor_user_id = context.authenticated_user->summary.user_id,
         .invitation_id = invitation_id,
     };
 
@@ -148,6 +166,14 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
       const std::string& user_id,
       const std::string& group_id) const {
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
     const auto json = request->getJsonObject();
     if (!json) {
       callback(BuildErrorResponse(
@@ -159,7 +185,7 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     }
 
     group::AssignScopedPermissionCommand command{
-        .actor_user_id = (*json).get("actorUserId", "").asString(),
+        .actor_user_id = context.authenticated_user->summary.user_id,
         .target_user_id = user_id,
         .group_id = group_id,
         .scoped_permission =
@@ -190,6 +216,14 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
       const drogon::HttpRequestPtr& request,
       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
       const std::string& group_id) const {
+    RequestContext context;
+    try {
+      context = BuildRequestContext(request, true);
+    } catch (const std::runtime_error& error) {
+      callback(BuildRequestContextErrorResponse(request, error.what()));
+      return;
+    }
+
     const auto json = request->getJsonObject();
     if (!json) {
       callback(BuildErrorResponse(
@@ -201,8 +235,8 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     }
 
     group::AssignOwnerGroupCommand command{
-        .actor_user_id = (*json).get("actorUserId", "").asString(),
-        .target_user_id = (*json).get("targetUserId", "").asString(),
+        .actor_user_id = context.authenticated_user->summary.user_id,
+        .target_user_id = (*json).get("target_user_id", "").asString(),
         .group_id = group_id,
     };
 
@@ -230,6 +264,9 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
     if (error_code == "group_name_already_exists" || error_code == "invitation_already_exists" ||
         error_code == "user_already_member") {
       return BuildErrorResponse(request, drogon::k409Conflict, error_code, error_code);
+    }
+    if (error_code == "target_not_group_member") {
+      return BuildErrorResponse(request, drogon::k400BadRequest, error_code, error_code);
     }
     return BuildErrorResponse(request, drogon::k400BadRequest, error_code, error_code);
   }
