@@ -47,6 +47,38 @@ Json::Value ToJson(const permission::ScopedPermission& permission) {
   return value;
 }
 
+Json::Value ToJson(const permission::AccessRequirement& requirement) {
+  Json::Value value(Json::objectValue);
+  value["group_id"] = requirement.group_id;
+  value["read"] = requirement.read;
+  value["write"] = requirement.write;
+  return value;
+}
+
+Json::Value ToJson(const article::ArticleSummary& summary) {
+  Json::Value value(Json::objectValue);
+  value["article_id"] = summary.article_id;
+  value["title"] = summary.title;
+  value["created_by_user_id"] = summary.created_by_user_id;
+  value["updated_by_user_id"] = summary.updated_by_user_id;
+  value["is_locked"] = summary.is_locked;
+  value["locked_by_user_id"] = summary.locked_by_user_id.has_value() ? *summary.locked_by_user_id : "";
+  value["locked_at"] = summary.locked_at.has_value() ? *summary.locked_at : "";
+
+  Json::Value required_permissions(Json::arrayValue);
+  for (const auto& permission : summary.required_permissions) {
+    required_permissions.append(ToJson(permission));
+  }
+  value["required_permissions"] = required_permissions;
+  return value;
+}
+
+Json::Value ToJson(const article::ArticleDetails& details) {
+  Json::Value value = ToJson(details.summary);
+  value["body"] = details.body;
+  return value;
+}
+
 Json::Value ToJson(group::InvitationStatus status) {
   return Json::Value(InvitationStatusToString(status));
 }

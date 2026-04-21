@@ -166,6 +166,41 @@ target_link_libraries(auth_tests
 
 add_test(NAME auth_tests COMMAND auth_tests)
 
+add_library(picaresque_article
+  src/article/article_service.cpp
+  src/article/in_memory_article_repository.cpp
+)
+
+target_include_directories(picaresque_article
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_target_properties(picaresque_article PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(picaresque_article
+  PUBLIC
+    picaresque_permission
+    picaresque_user
+)
+
+add_executable(article_tests
+  tests/article_tests.cpp
+)
+
+target_link_libraries(article_tests
+  PRIVATE
+    picaresque_article
+    picaresque_permission
+    picaresque_user
+)
+
+add_test(NAME article_tests COMMAND article_tests)
+
 if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_package(Drogon QUIET)
   find_path(MYSQL_INCLUDE_DIR mysql/mysql.h)
@@ -253,6 +288,8 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
 
     add_executable(picaresque_server
       src/access/mysql_access_repository.cpp
+      src/article/mysql_article_repository.cpp
+      src/http/article_controller.cpp
       src/http/auth_controller.cpp
       src/http/group_management_controller.cpp
       src/http/json_serialization.cpp
@@ -279,6 +316,7 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
         ${MYSQLCLIENT_LIBRARY}
         OpenSSL::Crypto
         picaresque_access
+        picaresque_article
         picaresque_auth
         picaresque_permission
         picaresque_user
