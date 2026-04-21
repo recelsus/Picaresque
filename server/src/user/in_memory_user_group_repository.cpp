@@ -12,7 +12,7 @@ bool HasScopedPermissionForGroup(const UserDetails& details, const std::string& 
       details.scoped_permissions.begin(),
       details.scoped_permissions.end(),
       [&group_id](const permission::ScopedPermission& scoped_permission) {
-        return scoped_permission.name == group_id;
+        return scoped_permission.group_id == group_id;
       });
 }
 
@@ -23,7 +23,7 @@ void UpsertScopedPermissionInUser(
       details.scoped_permissions.begin(),
       details.scoped_permissions.end(),
       [&scoped_permission](const permission::ScopedPermission& current) {
-        return current.name == scoped_permission.name;
+        return current.group_id == scoped_permission.group_id;
       });
 
   if (it == details.scoped_permissions.end()) {

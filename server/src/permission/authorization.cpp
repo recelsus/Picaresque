@@ -6,12 +6,12 @@
 namespace picaresque::permission {
 namespace {
 
-bool CanManageGroup(const User& actor, const std::string& group_name) {
+bool CanManageGroup(const User& actor, const std::string& group_id) {
   if (actor.role == Role::Admin) {
     return true;
   }
 
-  const auto resolved = ResolvePermissionForGroup(actor, group_name);
+  const auto resolved = ResolvePermissionForGroup(actor, group_id);
   if (actor.role == Role::Owner) {
     return resolved.source == PermissionSource::OwnedGroupOverride ||
         resolved.write >= kManagerPermission;
@@ -26,33 +26,33 @@ bool CanCreateGroup(const User& actor) {
   return actor.role == Role::Admin || actor.role == Role::Owner;
 }
 
-bool CanDeleteGroup(const User& actor, const std::string& group_name) {
+bool CanDeleteGroup(const User& actor, const std::string& group_id) {
   if (actor.role == Role::Admin) {
     return true;
   }
 
   return actor.role == Role::Owner &&
-      ResolvePermissionForGroup(actor, group_name).source == PermissionSource::OwnedGroupOverride;
+      ResolvePermissionForGroup(actor, group_id).source == PermissionSource::OwnedGroupOverride;
 }
 
-bool CanInviteToGroup(const User& actor, const std::string& group_name) {
-  return CanManageGroup(actor, group_name);
+bool CanInviteToGroup(const User& actor, const std::string& group_id) {
+  return CanManageGroup(actor, group_id);
 }
 
 bool CanAssignScopedPermission(
     const User& actor,
     const User& target,
-    const std::string& group_name,
+    const std::string& group_id,
     const ScopedPermission& assignment) {
-  if (assignment.name == "*") {
+  if (assignment.group_id == "*") {
     return actor.role == Role::Admin;
   }
 
-  if (assignment.name != group_name) {
+  if (assignment.group_id != group_id) {
     return false;
   }
 
-  if (!IsMemberOfGroup(target, group_name)) {
+  if (!IsMemberOfGroup(target, group_id)) {
     return false;
   }
 
@@ -60,7 +60,7 @@ bool CanAssignScopedPermission(
     return true;
   }
 
-  if (!CanManageGroup(actor, group_name)) {
+  if (!CanManageGroup(actor, group_id)) {
     return false;
   }
 

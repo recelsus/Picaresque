@@ -31,12 +31,12 @@ void ValidateReadWrite(std::uint8_t read, std::uint8_t write, const char* label)
 }  // namespace
 
 void ValidateScopedPermission(const ScopedPermission& permission) {
-  ValidateName(permission.name, "scope name");
+  ValidateName(permission.group_id, "scope group_id");
   ValidateReadWrite(permission.read, permission.write, "scoped permission");
 }
 
 void ValidateAccessRequirement(const AccessRequirement& requirement) {
-  ValidateName(requirement.name, "requirement name");
+  ValidateName(requirement.group_id, "requirement group_id");
   ValidateReadWrite(requirement.read, requirement.write, "access requirement");
 }
 
@@ -49,10 +49,10 @@ void ValidateUser(const User& user) {
     throw ValidationError("user_name must not be empty");
   }
 
-  std::unordered_set<std::string> owned_group_names;
+  std::unordered_set<std::string> owned_group_ids;
   for (const auto& owned_group : user.owned_groups) {
     ValidateName(owned_group, "owned group");
-    if (!owned_group_names.insert(owned_group).second) {
+    if (!owned_group_ids.insert(owned_group).second) {
       throw ValidationError("owned_groups must not contain duplicates");
     }
   }
@@ -60,8 +60,8 @@ void ValidateUser(const User& user) {
   std::unordered_set<std::string> scoped_names;
   for (const auto& scope : user.scoped_permissions) {
     ValidateScopedPermission(scope);
-    if (!scoped_names.insert(scope.name).second) {
-      throw ValidationError("scoped_permissions must not contain duplicate names");
+    if (!scoped_names.insert(scope.group_id).second) {
+      throw ValidationError("scoped_permissions must not contain duplicate group_ids");
     }
   }
 }

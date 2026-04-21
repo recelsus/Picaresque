@@ -21,7 +21,7 @@ enum class PermissionSource {
 };
 
 struct ScopedPermission {
-  std::string name;
+  std::string group_id;
   std::uint8_t read = 0;
   std::uint8_t write = 0;
 };
@@ -35,14 +35,14 @@ struct User {
 };
 
 struct ResolvedPermission {
-  std::string name;
+  std::string group_id;
   std::uint8_t read = 0;
   std::uint8_t write = 0;
   PermissionSource source = PermissionSource::DefaultScope;
 };
 
 struct AccessRequirement {
-  std::string name;
+  std::string group_id;
   std::uint8_t read = 0;
   std::uint8_t write = 0;
 };

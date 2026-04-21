@@ -190,7 +190,7 @@ class GroupManagementController : public drogon::HttpController<GroupManagementC
         .group_id = group_id,
         .scoped_permission =
             {
-                .name = group_id,
+                .group_id = group_id,
                 .read = static_cast<std::uint8_t>((*json).get("read", 0).asUInt()),
                 .write = static_cast<std::uint8_t>((*json).get("write", 0).asUInt()),
             },

@@ -41,7 +41,7 @@ Json::Value ToJson(permission::Role role) {
 
 Json::Value ToJson(const permission::ScopedPermission& permission) {
   Json::Value value(Json::objectValue);
-  value["name"] = permission.name;
+  value["group_id"] = permission.group_id;
   value["read"] = permission.read;
   value["write"] = permission.write;
   return value;
@@ -103,8 +103,8 @@ Json::Value ToJson(const user::UserDetails& details) {
   Json::Value value = ToJson(details.summary);
 
   Json::Value owned_groups(Json::arrayValue);
-  for (const auto& group_name : details.owned_groups) {
-    owned_groups.append(group_name);
+  for (const auto& owned_group_id : details.owned_groups) {
+    owned_groups.append(owned_group_id);
   }
 
   Json::Value scoped_permissions(Json::arrayValue);

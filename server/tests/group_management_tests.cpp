@@ -1,6 +1,8 @@
 #include <cassert>
+#include <algorithm>
 
 #include "picaresque/group/group_management_service.hpp"
+#include "picaresque/permission/api.hpp"
 #include "picaresque/user/in_memory_user_group_repository.hpp"
 #include "picaresque/user/user_management_service.hpp"
 
@@ -27,6 +29,14 @@ int main() {
       .email = "member1@example.local",
       .password = "change-me",
       .role = permission::Role::Member,
+  });
+
+  const auto owner = user_service.CreateUser({
+      .login_id = "owner1",
+      .user_name = "Owner One",
+      .email = "owner1@example.local",
+      .password = "change-me",
+      .role = permission::Role::Owner,
   });
 
   const auto created_group = group_service.CreateGroup({
@@ -56,7 +66,7 @@ int main() {
       .group_id = created_group.summary.group_id,
       .scoped_permission =
           {
-              .name = created_group.summary.group_id,
+              .group_id = created_group.summary.group_id,
               .read = 60,
               .write = 60,
           },
@@ -75,6 +85,32 @@ int main() {
   assert(member_details.summary.role == permission::Role::Owner);
   assert(!member_details.owned_groups.empty());
   assert(member_details.owned_groups.front() == created_group.summary.group_id);
+
+  const auto owner_created_group = group_service.CreateGroup({
+      .actor_user_id = owner.summary.user_id,
+      .group_name = "group-owner-created",
+      .description = std::string("Owner created group"),
+  });
+
+  const auto owner_details = user_service.GetUserDetails(owner.summary.user_id);
+  assert(std::find(
+             owner_details.owned_groups.begin(),
+             owner_details.owned_groups.end(),
+             owner_created_group.summary.group_id) != owner_details.owned_groups.end());
+
+  const permission::User permission_owner{
+      .user_id = owner_details.summary.user_id,
+      .user_name = owner_details.summary.user_name,
+      .role = owner_details.summary.role,
+      .owned_groups = owner_details.owned_groups,
+      .scoped_permissions = owner_details.scoped_permissions,
+  };
+  const auto resolved = permission::ResolvePermissionForGroup(
+      permission_owner,
+      owner_created_group.summary.group_id);
+  assert(resolved.read == 99);
+  assert(resolved.write == 99);
+  assert(resolved.source == permission::PermissionSource::OwnedGroupOverride);
 
   return 0;
 }

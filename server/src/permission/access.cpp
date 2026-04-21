@@ -15,7 +15,7 @@ bool MatchesAnyRequirement(
   }
 
   for (const auto& requirement : requirements) {
-    const auto resolved = ResolvePermissionForGroup(user, requirement.name);
+    const auto resolved = ResolvePermissionForGroup(user, requirement.group_id);
     const bool read_ok = !require_read || resolved.read >= requirement.read;
     const bool write_ok = !require_write || resolved.write >= requirement.write;
 

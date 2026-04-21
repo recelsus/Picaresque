@@ -94,6 +94,88 @@ int main() {
           },
   };
 
+  const permission::EmbeddedQueryResource article_10_table_30_query{
+      .query_id = "query_article_10_table_30",
+      .article =
+          {
+              .article_id = "article_beta_10",
+              .required_permissions = {
+                  {"group_beta", 10, 10},
+              },
+          },
+      .table =
+          {
+              .table_name = "table_missing_30",
+              .required_permissions = {
+                  {"group_missing", 30, 30},
+              },
+          },
+  };
+
+  const permission::User owner_user{
+      .user_id = "user_owner_resource",
+      .user_name = "Owner Resource",
+      .role = permission::Role::Owner,
+      .owned_groups = {"group_owned"},
+      .scoped_permissions = {},
+  };
+
+  const permission::ArticleResource owned_article{
+      .article_id = "article_owned",
+      .required_permissions = {
+          {"group_owned", 99, 99},
+      },
+  };
+
+  const permission::TableResource owned_table{
+      .table_name = "table_owned",
+      .required_permissions = {
+          {"group_owned", 99, 99},
+      },
+  };
+
+  const permission::User wildcard_user{
+      .user_id = "user_wildcard_resource",
+      .user_name = "Wildcard Resource",
+      .role = permission::Role::Member,
+      .owned_groups = {},
+      .scoped_permissions = {
+          {"*", 30, 30},
+      },
+  };
+
+  const permission::ArticleResource wildcard_article{
+      .article_id = "article_wildcard",
+      .required_permissions = {
+          {"group_any", 30, 30},
+      },
+  };
+
+  const permission::TableResource wildcard_table{
+      .table_name = "table_wildcard",
+      .required_permissions = {
+          {"group_any", 30, 30},
+      },
+  };
+
+  const permission::User direct_over_wildcard_user{
+      .user_id = "user_direct_over_wildcard",
+      .user_name = "Direct Over Wildcard",
+      .role = permission::Role::Member,
+      .owned_groups = {},
+      .scoped_permissions = {
+          {"group_direct", 10, 10},
+          {"*", 90, 90},
+      },
+  };
+
+  const permission::ArticleResource direct_scope_article{
+      .article_id = "article_direct_scope",
+      .required_permissions = {
+          {"group_direct", 30, 30},
+      },
+  };
+
   assert(permission::CanReadArticle(member_user, public_article));
   assert(permission::CanWriteArticle(member_user, public_article));
   assert(permission::CanReadArticle(member_user, restricted_article));
@@ -114,6 +196,21 @@ int main() {
   assert(!permission::CanEditEmbeddedQuery(member_user, article_open_table_locked_query));
   assert(!permission::CanViewEmbeddedQuery(member_user, article_locked_table_open_query));
   assert(permission::CanEditEmbeddedQuery(member_user, article_locked_table_open_query));
+  assert(permission::CanViewEmbeddedQuery(member_user, article_10_table_30_query));
+  assert(!permission::CanEditEmbeddedQuery(member_user, article_10_table_30_query));
+
+  assert(permission::CanReadArticle(owner_user, owned_article));
+  assert(permission::CanWriteArticle(owner_user, owned_article));
+  assert(permission::CanReadTable(owner_user, owned_table));
+  assert(permission::CanWriteTable(owner_user, owned_table));
+
+  assert(permission::CanReadArticle(wildcard_user, wildcard_article));
+  assert(permission::CanWriteArticle(wildcard_user, wildcard_article));
+  assert(permission::CanReadTable(wildcard_user, wildcard_table));
+  assert(permission::CanWriteTable(wildcard_user, wildcard_table));
+
+  assert(!permission::CanReadArticle(direct_over_wildcard_user, direct_scope_article));
+  assert(!permission::CanWriteArticle(direct_over_wildcard_user, direct_scope_article));
 
   return 0;
 }

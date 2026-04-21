@@ -100,11 +100,11 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
 
     auto scoped_result = ExecuteQuery(
         connection.get(),
-        "SELECT scope_name, read_level, write_level FROM user_scoped_permissions WHERE user_id = '" +
-            EscapeSqlString(connection.get(), user_id) + "' ORDER BY scope_name");
+        "SELECT group_id, read_level, write_level FROM user_scoped_permissions WHERE user_id = '" +
+            EscapeSqlString(connection.get(), user_id) + "' ORDER BY group_id");
     while ((row = mysql_fetch_row(scoped_result.get())) != nullptr) {
       details.scoped_permissions.push_back({
-          .name = row[0] == nullptr ? "" : row[0],
+          .group_id = row[0] == nullptr ? "" : row[0],
           .read = ParseUint8(row[1]),
           .write = ParseUint8(row[2]),
       });
@@ -176,9 +176,9 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
         ExecuteStatement(
             connection.get(),
             "INSERT INTO user_scoped_permissions "
-            "(user_id, scope_name, read_level, write_level) VALUES ('" +
+            "(user_id, group_id, read_level, write_level) VALUES ('" +
                 EscapeSqlString(connection.get(), user_id) + "', '" +
-                EscapeSqlString(connection.get(), scoped_permission.name) + "', " +
+                EscapeSqlString(connection.get(), scoped_permission.group_id) + "', " +
                 std::to_string(scoped_permission.read) + ", " + std::to_string(scoped_permission.write) +
                 ")");
       }
@@ -331,7 +331,7 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
         ExecuteStatement(
             connection.get(),
             "INSERT INTO user_scoped_permissions "
-            "(user_id, scope_name, read_level, write_level) VALUES ('" +
+            "(user_id, group_id, read_level, write_level) VALUES ('" +
                 EscapeSqlString(connection.get(), actor.summary.user_id) + "', '" +
                 EscapeSqlString(connection.get(), group_id) + "', 10, 10)");
       }
@@ -400,10 +400,10 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
       ExecuteStatement(
           connection.get(),
           "INSERT INTO user_scoped_permissions "
-          "(user_id, scope_name, read_level, write_level) VALUES ('" +
+          "(user_id, group_id, read_level, write_level) VALUES ('" +
               EscapeSqlString(connection.get(), command.actor_user_id) + "', '" +
               EscapeSqlString(connection.get(), invitation->group_id) +
-              "', 10, 10) ON DUPLICATE KEY UPDATE scope_name = scope_name");
+              "', 10, 10) ON DUPLICATE KEY UPDATE group_id = group_id");
 
       CommitTransaction(connection.get());
       return *FindInvitationById(command.invitation_id);
@@ -420,9 +420,9 @@ class MySqlUserGroupRepository final : public UserGroupRepository {
     ExecuteStatement(
         connection.get(),
         "INSERT INTO user_scoped_permissions "
-        "(user_id, scope_name, read_level, write_level) VALUES ('" +
+        "(user_id, group_id, read_level, write_level) VALUES ('" +
             EscapeSqlString(connection.get(), user_id) + "', '" +
-            EscapeSqlString(connection.get(), scoped_permission.name) + "', " +
+            EscapeSqlString(connection.get(), scoped_permission.group_id) + "', " +
             std::to_string(scoped_permission.read) + ", " + std::to_string(scoped_permission.write) +
             ") ON DUPLICATE KEY UPDATE read_level = VALUES(read_level), write_level = VALUES(write_level)");
     return scoped_permission;
