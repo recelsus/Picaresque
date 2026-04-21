@@ -6,6 +6,8 @@ enable_testing()
 
 option(PICARESQUE_ENABLE_DROGON_SERVER "Build the Drogon HTTP server skeleton" ON)
 
+find_package(OpenSSL REQUIRED)
+
 add_library(picaresque_permission
   src/permission/access.cpp
   src/permission/authorization.cpp
@@ -78,7 +80,7 @@ add_test(NAME access_tests COMMAND access_tests)
 
 add_library(picaresque_user
   src/group/group_management_service.cpp
-  src/user/in_memory_state.cpp
+  src/user/in_memory_user_group_repository.cpp
   src/user/user_management_service.cpp
 )
 
@@ -95,6 +97,27 @@ set_target_properties(picaresque_user PROPERTIES
 
 target_link_libraries(picaresque_user PUBLIC picaresque_permission)
 
+add_library(picaresque_auth
+  src/auth/auth_service.cpp
+)
+
+target_include_directories(picaresque_auth
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_target_properties(picaresque_auth PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(picaresque_auth
+  PUBLIC
+    OpenSSL::Crypto
+    picaresque_user
+)
+
 add_executable(group_management_tests
   tests/group_management_tests.cpp
 )
@@ -107,20 +130,61 @@ target_link_libraries(group_management_tests
 
 add_test(NAME group_management_tests COMMAND group_management_tests)
 
+add_executable(auth_tests
+  tests/auth_tests.cpp
+)
+
+target_link_libraries(auth_tests
+  PRIVATE
+    picaresque_auth
+    picaresque_user
+)
+
+add_test(NAME auth_tests COMMAND auth_tests)
+
 if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_package(Drogon QUIET)
+  find_path(MYSQL_INCLUDE_DIR mysql/mysql.h)
+  find_library(MYSQLCLIENT_LIBRARY NAMES mysqlclient mariadb)
 
-  if(Drogon_FOUND)
+  if(Drogon_FOUND AND MYSQL_INCLUDE_DIR AND MYSQLCLIENT_LIBRARY)
+    add_executable(picaresque_migrate
+      src/migration/main.cpp
+      src/migration/migration_runner.cpp
+    )
+
+    target_include_directories(picaresque_migrate
+      PRIVATE
+        ${MYSQL_INCLUDE_DIR}
+    )
+
+    set_target_properties(picaresque_migrate PROPERTIES
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+      CXX_EXTENSIONS OFF
+    )
+
+    target_link_libraries(picaresque_migrate
+      PRIVATE
+        Drogon::Drogon
+        ${MYSQLCLIENT_LIBRARY}
+    )
+
     add_executable(picaresque_server
+      src/access/mysql_access_repository.cpp
+      src/http/auth_controller.cpp
       src/http/group_management_controller.cpp
       src/http/json_serialization.cpp
+      src/http/request_context.cpp
       src/http/user_management_controller.cpp
       src/main.cpp
+      src/user/mysql_user_group_repository.cpp
     )
 
     target_include_directories(picaresque_server
       PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${MYSQL_INCLUDE_DIR}
     )
 
     set_target_properties(picaresque_server PROPERTIES
@@ -131,10 +195,14 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
     target_link_libraries(picaresque_server
       PRIVATE
         Drogon::Drogon
+        ${MYSQLCLIENT_LIBRARY}
+        OpenSSL::Crypto
+        picaresque_access
+        picaresque_auth
         picaresque_permission
         picaresque_user
     )
   else()
-    message(STATUS "Drogon not found. The HTTP server target will not be built.")
+    message(STATUS "Drogon or MySQL client library not found. Server and migration targets will not be built.")
   endif()
 endif()

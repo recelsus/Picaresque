@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY uk_users_email (email)
 );
 
-CREATE TABLE IF NOT EXISTS groups (
+CREATE TABLE IF NOT EXISTS user_groups (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   group_id CHAR(36) NOT NULL,
   group_name VARCHAR(128) NOT NULL,
@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS groups (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
-  UNIQUE KEY uk_groups_group_id (group_id),
-  UNIQUE KEY uk_groups_group_name (group_name),
-  CONSTRAINT fk_groups_created_by_user
+  UNIQUE KEY uk_user_groups_group_id (group_id),
+  UNIQUE KEY uk_user_groups_group_name (group_name),
+  CONSTRAINT fk_user_groups_created_by_user
     FOREIGN KEY (created_by_user_id) REFERENCES users(user_id)
 );
 
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS group_owners (
   PRIMARY KEY (id),
   UNIQUE KEY uk_group_owners_group_user (group_id, user_id),
   CONSTRAINT fk_group_owners_group
-    FOREIGN KEY (group_id) REFERENCES groups(group_id),
+    FOREIGN KEY (group_id) REFERENCES user_groups(group_id),
   CONSTRAINT fk_group_owners_user
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS group_memberships (
   UNIQUE KEY uk_group_memberships_group_user (group_id, user_id),
   KEY idx_group_memberships_user_id (user_id),
   CONSTRAINT fk_group_memberships_group
-    FOREIGN KEY (group_id) REFERENCES groups(group_id),
+    FOREIGN KEY (group_id) REFERENCES user_groups(group_id),
   CONSTRAINT fk_group_memberships_user
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS group_invitations (
   UNIQUE KEY uk_group_invitations_invitation_id (invitation_id),
   KEY idx_group_invitations_invited_user (invited_user_id),
   CONSTRAINT fk_group_invitations_group
-    FOREIGN KEY (group_id) REFERENCES groups(group_id),
+    FOREIGN KEY (group_id) REFERENCES user_groups(group_id),
   CONSTRAINT fk_group_invitations_invited_user
     FOREIGN KEY (invited_user_id) REFERENCES users(user_id),
   CONSTRAINT fk_group_invitations_invited_by_user
