@@ -148,6 +148,63 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_library(MYSQLCLIENT_LIBRARY NAMES mysqlclient mariadb)
 
   if(Drogon_FOUND AND MYSQL_INCLUDE_DIR AND MYSQLCLIENT_LIBRARY)
+    add_executable(migration_runner_tests
+      tests/migration_runner_tests.cpp
+      src/migration/migration_runner.cpp
+    )
+
+    target_include_directories(migration_runner_tests
+      PRIVATE
+        ${MYSQL_INCLUDE_DIR}
+    )
+
+    set_target_properties(migration_runner_tests PROPERTIES
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+      CXX_EXTENSIONS OFF
+    )
+
+    target_link_libraries(migration_runner_tests
+      PRIVATE
+        Drogon::Drogon
+        ${MYSQLCLIENT_LIBRARY}
+    )
+
+    add_test(NAME migration_runner_tests COMMAND migration_runner_tests)
+
+    add_executable(request_context_tests
+      tests/request_context_tests.cpp
+      src/access/mysql_access_repository.cpp
+      src/http/json_serialization.cpp
+      src/http/request_context.cpp
+      src/user/mysql_user_group_repository.cpp
+    )
+
+    target_include_directories(request_context_tests
+      PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${MYSQL_INCLUDE_DIR}
+    )
+
+    set_target_properties(request_context_tests PROPERTIES
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+      CXX_EXTENSIONS OFF
+    )
+
+    target_link_libraries(request_context_tests
+      PRIVATE
+        Drogon::Drogon
+        ${MYSQLCLIENT_LIBRARY}
+        OpenSSL::Crypto
+        picaresque_access
+        picaresque_auth
+        picaresque_permission
+        picaresque_user
+    )
+
+    add_test(NAME request_context_tests COMMAND request_context_tests)
+
     add_executable(picaresque_migrate
       src/migration/main.cpp
       src/migration/migration_runner.cpp

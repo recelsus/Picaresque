@@ -40,6 +40,26 @@ int main() {
               .enabled = true,
               .surface = access::AccessSurface::Web,
           },
+          {
+              .id = 4,
+              .value_text = "198.51.100.0/24",
+              .address_family = access::AddressFamily::IPv4,
+              .rule_type = access::IpRuleType::Cidr,
+              .prefix_length = 24,
+              .effect = access::RuleEffect::Allow,
+              .enabled = true,
+              .surface = access::AccessSurface::RestApi,
+          },
+          {
+              .id = 5,
+              .value_text = "203.0.113.10",
+              .address_family = access::AddressFamily::IPv4,
+              .rule_type = access::IpRuleType::Single,
+              .prefix_length = 32,
+              .effect = access::RuleEffect::Deny,
+              .enabled = false,
+              .surface = std::nullopt,
+          },
       });
 
   const access::AccessPolicyService deny_by_default_service(
@@ -115,6 +135,40 @@ int main() {
         now);
     assert(result.decision == access::AccessDecision::Deny);
     assert(result.reason == "invalid_client_ip");
+  }
+
+  {
+    const auto result = deny_by_default_service.Evaluate(
+        {
+            .client_ip = "198.51.100.42",
+            .surface = access::AccessSurface::RestApi,
+        },
+        now);
+    assert(result.decision == access::AccessDecision::Allow);
+    assert(result.reason == "ip_allow");
+    assert(result.matched_ip_rule_id == 4);
+  }
+
+  {
+    const auto result = deny_by_default_service.Evaluate(
+        {
+            .client_ip = "198.51.100.42",
+            .surface = access::AccessSurface::Web,
+        },
+        now);
+    assert(result.decision == access::AccessDecision::Deny);
+    assert(result.reason == "default_deny");
+  }
+
+  {
+    const auto result = mixed_default_service.Evaluate(
+        {
+            .client_ip = "203.0.113.10",
+            .surface = access::AccessSurface::RestApi,
+        },
+        now);
+    assert(result.decision == access::AccessDecision::Deny);
+    assert(result.reason == "default_deny");
   }
 
   return 0;

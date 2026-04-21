@@ -14,6 +14,7 @@ class UserGroupRepository {
  public:
   virtual ~UserGroupRepository() = default;
 
+  // User aggregate reads.
   virtual std::size_t CountUsers() const = 0;
   virtual std::vector<UserSummary> ListUsers(const UserListFilter& filter) const = 0;
   virtual std::optional<UserDetails> FindUserDetailsById(const std::string& user_id) const = 0;
@@ -21,8 +22,11 @@ class UserGroupRepository {
   virtual bool UserExistsByLoginIdOrEmail(
       const std::string& login_id,
       const std::string& email) const = 0;
+
+  // API key persistence. Plain keys are never stored by repository implementations.
   virtual std::optional<auth::ApiKeyInfo> FindApiKeyInfoByUserId(const std::string& user_id) const = 0;
 
+  // User aggregate writes.
   virtual UserDetails CreateUser(
       const CreateUserCommand& command,
       const std::vector<permission::ScopedPermission>& initial_scoped_permissions) = 0;
@@ -32,18 +36,22 @@ class UserGroupRepository {
       const std::string& key_hash) = 0;
   virtual void DeleteApiKey(const std::string& user_id) = 0;
 
+  // Group facts used by service-level authorization and membership checks.
   virtual std::optional<group::GroupSummary> FindGroupSummaryById(const std::string& group_id) const = 0;
   virtual bool GroupExistsByName(const std::string& group_name) const = 0;
   virtual bool HasActiveMembership(
       const std::string& group_id,
       const std::string& user_id) const = 0;
 
+  // Invitation facts.
   virtual std::optional<group::GroupInvitation> FindInvitationById(
       const std::string& invitation_id) const = 0;
   virtual bool HasPendingInvitation(
       const std::string& group_id,
       const std::string& invited_user_id) const = 0;
 
+  // Group aggregate writes. Implementations own persistence invariants such as
+  // owner-created groups adding the actor to ownership and membership.
   virtual group::GroupDetails CreateGroup(
       const group::CreateGroupCommand& command,
       const UserDetails& actor) = 0;

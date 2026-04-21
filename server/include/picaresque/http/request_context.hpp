@@ -6,7 +6,9 @@
 #include <optional>
 #include <string>
 
+#include "picaresque/access/repository.hpp"
 #include "picaresque/access/types.hpp"
+#include "picaresque/user/user_group_repository.hpp"
 #include "picaresque/user/user_types.hpp"
 
 namespace picaresque::http {
@@ -19,6 +21,12 @@ struct RequestContext {
 };
 
 RequestContext BuildRequestContext(const drogon::HttpRequestPtr& request, bool require_api_key);
+RequestContext BuildRequestContext(
+    const drogon::HttpRequestPtr& request,
+    bool require_api_key,
+    const access::AccessRepository& access_repository,
+    access::AccessConfiguration access_configuration,
+    user::UserGroupRepository& user_repository);
 drogon::HttpResponsePtr BuildRequestContextErrorResponse(
     const drogon::HttpRequestPtr& request,
     const std::string& error_code);

@@ -180,6 +180,35 @@ int main() {
   }
 
   {
+    const permission::User wildcard_user{
+        .user_id = "user_wildcard",
+        .user_name = "Wildcard User",
+        .role = permission::Role::Member,
+        .owned_groups = {},
+        .scoped_permissions = {
+            {"*", 40, 40},
+        },
+    };
+    const std::vector<permission::AccessRequirement> requirements = {
+        {"group_unknown", 30, 30},
+    };
+    const auto result = permission::EvaluateReadAndWrite(wildcard_user, requirements);
+    assert(result.IsAllowed());
+    assert(result.resolved_permission.has_value());
+    assert(result.resolved_permission->source == permission::PermissionSource::WildcardScope);
+  }
+
+  {
+    const std::vector<permission::AccessRequirement> requirements = {
+        {"group_unknown", 99, 99},
+    };
+    const auto result = permission::EvaluateReadAndWrite(admin_user, requirements);
+    assert(result.IsAllowed());
+    assert(result.resolved_permission.has_value());
+    assert(result.resolved_permission->source == permission::PermissionSource::AdminOverride);
+  }
+
+  {
     assert(permission::CanCreateGroup(owner_user));
     assert(permission::CanDeleteGroup(owner_user, "group_alpha"));
     assert(!permission::CanDeleteGroup(owner_user, "group_beta"));

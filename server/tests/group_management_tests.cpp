@@ -142,5 +142,46 @@ int main() {
   assert(resolved.write == 99);
   assert(resolved.source == permission::PermissionSource::OwnedGroupOverride);
 
+  const auto owner_invitation = group_service.InviteUser({
+      .actor_user_id = owner.summary.user_id,
+      .group_id = owner_created_group.summary.group_id,
+      .invited_user_id = outsider.summary.user_id,
+  });
+  assert(owner_invitation.status == group::InvitationStatus::Pending);
+
+  const auto owner_accepted = group_service.AcceptInvitation({
+      .actor_user_id = outsider.summary.user_id,
+      .invitation_id = owner_invitation.invitation_id,
+  });
+  assert(owner_accepted.status == group::InvitationStatus::Accepted);
+
+  const auto owner_assigned_permission = group_service.AssignScopedPermission({
+      .actor_user_id = owner.summary.user_id,
+      .target_user_id = outsider.summary.user_id,
+      .group_id = owner_created_group.summary.group_id,
+      .scoped_permission =
+          {
+              .group_id = owner_created_group.summary.group_id,
+              .read = 90,
+              .write = 90,
+          },
+  });
+  assert(owner_assigned_permission.read == 90);
+  assert(owner_assigned_permission.write == 90);
+
+  {
+    bool failed = false;
+    try {
+      group_service.AssignOwnerGroup({
+          .actor_user_id = owner.summary.user_id,
+          .target_user_id = outsider.summary.user_id,
+          .group_id = owner_created_group.summary.group_id,
+      });
+    } catch (const std::runtime_error& error) {
+      failed = std::string(error.what()) == "forbidden";
+    }
+    assert(failed);
+  }
+
   return 0;
 }

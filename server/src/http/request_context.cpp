@@ -42,6 +42,23 @@ access::AccessSurface ResolveSurface(const drogon::HttpRequestPtr& request) {
 RequestContext BuildRequestContext(
     const drogon::HttpRequestPtr& request,
     bool require_api_key) {
+  return BuildRequestContext(
+      request,
+      require_api_key,
+      access::GetMySqlAccessRepository(),
+      {
+          .web_default_policy = access::DefaultPolicy::Allow,
+          .rest_api_default_policy = access::DefaultPolicy::Allow,
+      },
+      user::GetMySqlUserGroupRepository());
+}
+
+RequestContext BuildRequestContext(
+    const drogon::HttpRequestPtr& request,
+    bool require_api_key,
+    const access::AccessRepository& access_repository,
+    access::AccessConfiguration access_configuration,
+    user::UserGroupRepository& user_repository) {
   RequestContext context{
       .request_id = request->getHeader("x-request-id"),
       .client_ip = ResolveClientIp(request),
@@ -49,12 +66,7 @@ RequestContext BuildRequestContext(
       .authenticated_user = std::nullopt,
   };
 
-  access::AccessPolicyService access_policy(
-      access::GetMySqlAccessRepository(),
-      {
-          .web_default_policy = access::DefaultPolicy::Allow,
-          .rest_api_default_policy = access::DefaultPolicy::Allow,
-      });
+  access::AccessPolicyService access_policy(access_repository, access_configuration);
   const auto access_result = access_policy.Evaluate(
       {
           .client_ip = context.client_ip,
@@ -67,7 +79,7 @@ RequestContext BuildRequestContext(
 
   const auto api_key = request->getHeader("x-api-key");
   if (!api_key.empty()) {
-    auth::AuthService auth_service(user::GetMySqlUserGroupRepository());
+    auth::AuthService auth_service(user_repository);
     context.authenticated_user = auth_service.AuthenticateApiKey(api_key);
     return context;
   }
