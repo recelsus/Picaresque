@@ -42,6 +42,13 @@ int main() {
       .password = "change-me",
       .role = permission::Role::Member,
   });
+  const auto unrelated_member = user_service.CreateUser({
+      .login_id = "unrelated-member",
+      .user_name = "Unrelated Member",
+      .email = "unrelated-member@example.local",
+      .password = "change-me",
+      .role = permission::Role::Member,
+  });
 
   const auto group_details = group_service.CreateGroup({
       .actor_user_id = owner.summary.user_id,
@@ -64,7 +71,7 @@ int main() {
       .scoped_permission =
           {
               .group_id = group_details.summary.group_id,
-              .read = 30,
+              .read = 60,
               .write = 30,
           },
   });
@@ -93,6 +100,51 @@ int main() {
   });
   assert(article_service.GetArticle(member.summary.user_id, restricted_article.summary.article_id)
              .body == "Restricted body");
+  bool unrelated_group_read_rejected = false;
+  try {
+    static_cast<void>(article_service.GetArticle(
+        unrelated_member.summary.user_id,
+        restricted_article.summary.article_id));
+  } catch (const std::runtime_error& error) {
+    unrelated_group_read_rejected = std::string(error.what()) == "forbidden";
+  }
+  assert(unrelated_group_read_rejected);
+
+  const auto read_only_article = article_service.CreateArticle({
+      .actor_user_id = owner.summary.user_id,
+      .title = "Read Only Article",
+      .body = "Read only body",
+      .required_permissions =
+          {
+              {
+                  .group_id = group_details.summary.group_id,
+                  .read = 60,
+                  .write = 60,
+              },
+          },
+  });
+  assert(article_service.GetArticle(member.summary.user_id, read_only_article.summary.article_id)
+             .body == "Read only body");
+  bool write_level_update_rejected = false;
+  try {
+    static_cast<void>(article_service.UpdateArticle({
+        .actor_user_id = member.summary.user_id,
+        .article_id = read_only_article.summary.article_id,
+        .title = "Member Cannot Update",
+        .body = "Update should fail",
+        .required_permissions =
+            {
+                {
+                    .group_id = group_details.summary.group_id,
+                    .read = 60,
+                    .write = 60,
+                },
+            },
+    }));
+  } catch (const std::runtime_error& error) {
+    write_level_update_rejected = std::string(error.what()) == "forbidden";
+  }
+  assert(write_level_update_rejected);
 
   const auto updated_article = article_service.UpdateArticle({
       .actor_user_id = member.summary.user_id,
