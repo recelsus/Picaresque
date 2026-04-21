@@ -78,9 +78,7 @@ UserDetails UserManagementService::CreateInitialAdmin(const CreateUserCommand& c
 
   return repository_.CreateUser(
       BuildPersistedCreateUserCommand(command),
-      {
-          {"*", 99, 99},
-      });
+      {});
 }
 
 UserDetails UserManagementService::CreateUser(const CreateUserCommand& command) const {

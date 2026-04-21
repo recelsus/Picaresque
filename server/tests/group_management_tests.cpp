@@ -24,6 +24,7 @@ int main() {
       .password = "change-me",
       .role = permission::Role::Admin,
   });
+  assert(admin.scoped_permissions.empty());
 
   const auto member = user_service.CreateUser({
       .login_id = "member1",

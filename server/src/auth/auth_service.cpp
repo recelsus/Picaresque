@@ -110,7 +110,7 @@ IssuedWebSession AuthService::LoginWithPassword(
   }
 
   const auto hashed_password = HashPassword(password);
-  if (password_record->password_hash != hashed_password && password_record->password_hash != password) {
+  if (password_record->password_hash != hashed_password) {
     throw std::runtime_error("invalid_credentials");
   }
 

@@ -22,6 +22,7 @@ int main() {
       .role = permission::Role::Admin,
   });
 
+  assert(created_user.scoped_permissions.empty());
   assert(!auth_service.GetUserApiKey(created_user.summary.user_id).has_value());
 
   const auto issued_session = auth_service.LoginWithPassword("admin", "change-me");
