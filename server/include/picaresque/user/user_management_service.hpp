@@ -13,6 +13,7 @@ class UserManagementService {
   std::vector<UserSummary> ListUsers(const UserListFilter& filter) const;
   UserDetails GetUserDetails(const std::string& user_id) const;
   UserDetails CreateInitialAdmin(const CreateUserCommand& command) const;
+  UserDetails CreateUser(const CreateUserCommand& command) const;
 };
 
 }  // namespace picaresque::user
