@@ -78,6 +78,26 @@ target_link_libraries(access_tests
 
 add_test(NAME access_tests COMMAND access_tests)
 
+add_library(picaresque_auth_hash
+  src/auth/hash.cpp
+)
+
+target_include_directories(picaresque_auth_hash
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_target_properties(picaresque_auth_hash PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(picaresque_auth_hash
+  PUBLIC
+    OpenSSL::Crypto
+)
+
 add_library(picaresque_user
   src/group/group_management_service.cpp
   src/user/in_memory_user_group_repository.cpp
@@ -97,7 +117,7 @@ set_target_properties(picaresque_user PROPERTIES
 
 target_link_libraries(picaresque_user
   PUBLIC
-    OpenSSL::Crypto
+    picaresque_auth_hash
     picaresque_permission
 )
 
@@ -118,7 +138,7 @@ set_target_properties(picaresque_auth PROPERTIES
 
 target_link_libraries(picaresque_auth
   PUBLIC
-    OpenSSL::Crypto
+    picaresque_auth_hash
     picaresque_user
 )
 

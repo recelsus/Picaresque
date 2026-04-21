@@ -1,11 +1,7 @@
 #include "picaresque/auth/auth_service.hpp"
 
-#include <iomanip>
 #include <random>
-#include <sstream>
 #include <stdexcept>
-
-#include <openssl/sha.h>
 
 namespace picaresque::auth {
 namespace {
@@ -35,22 +31,6 @@ std::string GenerateSessionToken() {
 std::string BuildPrefix(std::string_view value) {
   const std::size_t prefix_length = std::min<std::size_t>(12, value.size());
   return std::string(value.substr(0, prefix_length));
-}
-
-std::string HashValue(std::string_view namespace_prefix, std::string_view value) {
-  const std::string namespaced = std::string(namespace_prefix) + ":" + std::string(value);
-  unsigned char hash[SHA256_DIGEST_LENGTH];
-  SHA256(
-      reinterpret_cast<const unsigned char*>(namespaced.data()),
-      namespaced.size(),
-      hash);
-
-  std::ostringstream stream;
-  stream << std::hex << std::setfill('0');
-  for (const auto byte : hash) {
-    stream << std::setw(2) << static_cast<int>(byte);
-  }
-  return stream.str();
 }
 
 }  // namespace
@@ -142,18 +122,6 @@ void AuthService::LogoutWebSession(const std::string& session_token) const {
     throw std::runtime_error("session_required");
   }
   repository_.DeleteWebSessionByTokenHash(HashSessionToken(session_token));
-}
-
-std::string HashApiKey(std::string_view api_key) {
-  return HashValue("api_key", api_key);
-}
-
-std::string HashPassword(std::string_view password) {
-  return HashValue("password", password);
-}
-
-std::string HashSessionToken(std::string_view session_token) {
-  return HashValue("web_session", session_token);
 }
 
 }  // namespace picaresque::auth
