@@ -36,26 +36,26 @@ int main() {
   };
 
   const permission::TableResource public_table{
-      .table_name = "table_public",
+      .table_id = "table_public",
       .required_permissions = {},
   };
 
   const permission::TableResource restricted_table{
-      .table_name = "table_group_alpha",
+      .table_id = "table_group_alpha",
       .required_permissions = {
           {"group_alpha", 30, 30},
       },
   };
 
   const permission::TableResource write_restricted_table{
-      .table_name = "table_group_alpha_write_60",
+      .table_id = "table_group_alpha_write_60",
       .required_permissions = {
           {"group_alpha", 60, 60},
       },
   };
 
   const permission::TableResource or_table{
-      .table_name = "table_group_alpha_or_beta",
+      .table_id = "table_group_alpha_or_beta",
       .required_permissions = {
           {"group_missing", 90, 90},
           {"group_alpha", 30, 30},
@@ -71,7 +71,7 @@ int main() {
           },
       .table =
           {
-              .table_name = "table_locked",
+              .table_id = "table_locked",
               .required_permissions = {
                   {"group_alpha", 60, 60},
               },
@@ -89,7 +89,7 @@ int main() {
           },
       .table =
           {
-              .table_name = "table_open",
+              .table_id = "table_open",
               .required_permissions = {},
           },
   };
@@ -105,7 +105,7 @@ int main() {
           },
       .table =
           {
-              .table_name = "table_missing_30",
+              .table_id = "table_missing_30",
               .required_permissions = {
                   {"group_missing", 30, 30},
               },
@@ -128,7 +128,7 @@ int main() {
   };
 
   const permission::TableResource owned_table{
-      .table_name = "table_owned",
+      .table_id = "table_owned",
       .required_permissions = {
           {"group_owned", 99, 99},
       },
@@ -152,7 +152,7 @@ int main() {
   };
 
   const permission::TableResource wildcard_table{
-      .table_name = "table_wildcard",
+      .table_id = "table_wildcard",
       .required_permissions = {
           {"group_any", 30, 30},
       },

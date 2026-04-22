@@ -32,7 +32,7 @@ class TableService {
       const std::vector<ColumnDefinition>& columns,
       const std::vector<permission::AccessRequirement>& required_permissions) const;
   void ValidateColumn(const ColumnDefinition& column) const;
-  void ValidateRowValues(const TableDetails& table, const Json::Value& values) const;
+  Json::Value NormalizeRowValues(const TableDetails& table, const Json::Value& values) const;
 
   TableRepository& table_repository_;
   user::UserGroupRepository& user_repository_;

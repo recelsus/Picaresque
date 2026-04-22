@@ -8,7 +8,7 @@
 namespace picaresque::permission {
 
 struct TableResource {
-  std::string table_name;
+  std::string table_id;
   std::vector<AccessRequirement> required_permissions;
 };
 

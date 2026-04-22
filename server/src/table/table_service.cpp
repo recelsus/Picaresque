@@ -1,6 +1,9 @@
 #include "picaresque/table/table_service.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -25,21 +28,150 @@ std::vector<permission::AccessRequirement> EffectiveRequiredPermissions(
 
 permission::TableResource BuildTableResource(const TableSummary& table) {
   return {
-      .table_name = table.table_id,
+      .table_id = table.table_id,
       .required_permissions = EffectiveRequiredPermissions(table.required_permissions),
   };
 }
 
-bool IsIsoDateLike(const std::string& value) {
-  return value.size() == 10 && value[4] == '-' && value[7] == '-';
+bool IsDigits(const std::string& value, std::size_t start, std::size_t length) {
+  if (start + length > value.size()) {
+    return false;
+  }
+  for (std::size_t index = start; index < start + length; ++index) {
+    if (!std::isdigit(static_cast<unsigned char>(value[index]))) {
+      return false;
+    }
+  }
+  return true;
 }
 
-bool IsTimeLike(const std::string& value) {
-  return (value.size() == 5 || value.size() == 8) && value[2] == ':';
+int ParseNumber(const std::string& value, std::size_t start, std::size_t length) {
+  return std::stoi(value.substr(start, length));
 }
 
-bool IsDateTimeLike(const std::string& value) {
-  return value.find('T') != std::string::npos || value.find(' ') != std::string::npos;
+bool IsLeapYear(int year) {
+  return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+}
+
+int DaysInMonth(int year, int month) {
+  switch (month) {
+    case 1:
+    case 3:
+    case 5:
+    case 7:
+    case 8:
+    case 10:
+    case 12:
+      return 31;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    case 2:
+      return IsLeapYear(year) ? 29 : 28;
+    default:
+      return 0;
+  }
+}
+
+bool IsValidDate(const std::string& value) {
+  if (value.size() != 10 || value[4] != '-' || value[7] != '-') {
+    return false;
+  }
+  if (!IsDigits(value, 0, 4) || !IsDigits(value, 5, 2) || !IsDigits(value, 8, 2)) {
+    return false;
+  }
+  const int year = ParseNumber(value, 0, 4);
+  const int month = ParseNumber(value, 5, 2);
+  const int day = ParseNumber(value, 8, 2);
+  return month >= 1 && month <= 12 && day >= 1 && day <= DaysInMonth(year, month);
+}
+
+bool IsValidTime(const std::string& value) {
+  if ((value.size() != 5 && value.size() != 8) || value[2] != ':') {
+    return false;
+  }
+  if (!IsDigits(value, 0, 2) || !IsDigits(value, 3, 2)) {
+    return false;
+  }
+  if (value.size() == 8 && (value[5] != ':' || !IsDigits(value, 6, 2))) {
+    return false;
+  }
+  const int hour = ParseNumber(value, 0, 2);
+  const int minute = ParseNumber(value, 3, 2);
+  const int second = value.size() == 8 ? ParseNumber(value, 6, 2) : 0;
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
+}
+
+bool IsValidDateTime(const std::string& value) {
+  if (value.size() != 19 || (value[10] != 'T' && value[10] != ' ')) {
+    return false;
+  }
+  return IsValidDate(value.substr(0, 10)) && IsValidTime(value.substr(11, 8));
+}
+
+bool IsValidDecimalString(const std::string& value) {
+  if (value.empty()) {
+    return false;
+  }
+  std::size_t index = value[0] == '-' ? 1 : 0;
+  if (index == value.size()) {
+    return false;
+  }
+  bool saw_digit = false;
+  bool saw_dot = false;
+  bool saw_fraction_digit = false;
+  for (; index < value.size(); ++index) {
+    const char current = value[index];
+    if (std::isdigit(static_cast<unsigned char>(current))) {
+      saw_digit = true;
+      if (saw_dot) {
+        saw_fraction_digit = true;
+      }
+      continue;
+    }
+    if (current == '.' && !saw_dot) {
+      saw_dot = true;
+      continue;
+    }
+    return false;
+  }
+  return saw_digit && (!saw_dot || saw_fraction_digit);
+}
+
+std::string DecimalToString(const Json::Value& value) {
+  if (value.isString()) {
+    const auto text = value.asString();
+    if (!IsValidDecimalString(text)) {
+      throw std::runtime_error("invalid_column_value");
+    }
+    return text;
+  }
+  if (value.isInt64() || value.isInt()) {
+    return std::to_string(value.asLargestInt());
+  }
+  if (value.isUInt64() || value.isUInt()) {
+    return std::to_string(value.asLargestUInt());
+  }
+  if (value.isDouble()) {
+    std::ostringstream stream;
+    stream << std::setprecision(15) << value.asDouble();
+    auto text = stream.str();
+    if (text.find('.') != std::string::npos) {
+      while (!text.empty() && text.back() == '0') {
+        text.pop_back();
+      }
+      if (!text.empty() && text.back() == '.') {
+        text.pop_back();
+      }
+    }
+    if (!IsValidDecimalString(text)) {
+      throw std::runtime_error("invalid_column_value");
+    }
+    return text;
+  }
+  throw std::runtime_error("invalid_column_value");
 }
 
 }  // namespace
@@ -157,8 +289,9 @@ TableRow TableService::CreateRow(const CreateRowCommand& command) const {
   if (!CanWrite(BuildPermissionUser(command.actor_user_id), table->summary)) {
     throw std::runtime_error("forbidden");
   }
-  ValidateRowValues(*table, command.values);
-  return table_repository_.CreateRow(command);
+  auto normalized_command = command;
+  normalized_command.values = NormalizeRowValues(*table, command.values);
+  return table_repository_.CreateRow(normalized_command);
 }
 
 TableRow TableService::UpdateRow(const UpdateRowCommand& command) const {
@@ -172,8 +305,9 @@ TableRow TableService::UpdateRow(const UpdateRowCommand& command) const {
   if (!table_repository_.FindRowById(command.table_id, command.row_id).has_value()) {
     throw std::runtime_error("row_not_found");
   }
-  ValidateRowValues(*table, command.values);
-  return table_repository_.UpdateRow(command);
+  auto normalized_command = command;
+  normalized_command.values = NormalizeRowValues(*table, command.values);
+  return table_repository_.UpdateRow(normalized_command);
 }
 
 void TableService::DeleteRow(const DeleteRowCommand& command) const {
@@ -237,15 +371,16 @@ void TableService::ValidateColumn(const ColumnDefinition& column) const {
   }
 }
 
-void TableService::ValidateRowValues(const TableDetails& table, const Json::Value& values) const {
+Json::Value TableService::NormalizeRowValues(const TableDetails& table, const Json::Value& values) const {
   if (!values.isObject()) {
     throw std::runtime_error("row_values_must_be_object");
   }
 
+  Json::Value normalized_values = values;
   std::unordered_set<std::string> allowed_columns;
   for (const auto& column : table.columns) {
     allowed_columns.insert(column.column_name);
-    if (column.is_required && !values.isMember(column.column_name)) {
+    if (column.is_required && (!values.isMember(column.column_name) || values[column.column_name].isNull())) {
       throw std::runtime_error("required_column_missing");
     }
     if (!values.isMember(column.column_name) || values[column.column_name].isNull()) {
@@ -265,9 +400,7 @@ void TableService::ValidateRowValues(const TableDetails& table, const Json::Valu
         }
         break;
       case ColumnType::Decimal:
-        if (!value.isNumeric() && !value.isString()) {
-          throw std::runtime_error("invalid_column_value");
-        }
+        normalized_values[column.column_name] = DecimalToString(value);
         break;
       case ColumnType::Boolean:
         if (!value.isBool()) {
@@ -275,17 +408,17 @@ void TableService::ValidateRowValues(const TableDetails& table, const Json::Valu
         }
         break;
       case ColumnType::Date:
-        if (!value.isString() || !IsIsoDateLike(value.asString())) {
+        if (!value.isString() || !IsValidDate(value.asString())) {
           throw std::runtime_error("invalid_column_value");
         }
         break;
       case ColumnType::Time:
-        if (!value.isString() || !IsTimeLike(value.asString())) {
+        if (!value.isString() || !IsValidTime(value.asString())) {
           throw std::runtime_error("invalid_column_value");
         }
         break;
       case ColumnType::DateTime:
-        if (!value.isString() || !IsDateTimeLike(value.asString())) {
+        if (!value.isString() || !IsValidDateTime(value.asString())) {
           throw std::runtime_error("invalid_column_value");
         }
         break;
@@ -300,6 +433,7 @@ void TableService::ValidateRowValues(const TableDetails& table, const Json::Valu
       throw std::runtime_error("unknown_column");
     }
   }
+  return normalized_values;
 }
 
 const char* ColumnTypeToString(ColumnType type) {

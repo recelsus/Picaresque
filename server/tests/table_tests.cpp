@@ -143,6 +143,68 @@ int main() {
   assert(table_service.GetRow(member.summary.user_id, public_table.summary.table_id, row.row_id)
              .values["title"]
              .asString() == "first");
+  assert(row.values["price"].isString());
+  assert(row.values["price"].asString() == "1200.50");
+
+  auto expect_invalid_public_row = [&](Json::Value candidate_values) {
+    bool rejected = false;
+    try {
+      static_cast<void>(table_service.CreateRow({
+          .actor_user_id = admin.summary.user_id,
+          .table_id = public_table.summary.table_id,
+          .values = candidate_values,
+      }));
+    } catch (const std::runtime_error& error) {
+      rejected = std::string(error.what()) == "invalid_column_value";
+    }
+    assert(rejected);
+  };
+
+  Json::Value normalized_values = values;
+  normalized_values["title"] = "normalized";
+  normalized_values["price"] = 1.1;
+  normalized_values["scheduled_date"] = "2024-02-29";
+  normalized_values["scheduled_time"] = "18:30:59";
+  normalized_values["published_at"] = "2026-04-22 06:00:00";
+  const auto normalized_row = table_service.CreateRow({
+      .actor_user_id = admin.summary.user_id,
+      .table_id = public_table.summary.table_id,
+      .values = normalized_values,
+  });
+  assert(normalized_row.values["price"].isString());
+  assert(normalized_row.values["price"].asString() == "1.1");
+
+  Json::Value valid_integer_decimal_values = values;
+  valid_integer_decimal_values["title"] = "integer decimal";
+  valid_integer_decimal_values["price"] = 10;
+  const auto integer_decimal_row = table_service.CreateRow({
+      .actor_user_id = admin.summary.user_id,
+      .table_id = public_table.summary.table_id,
+      .values = valid_integer_decimal_values,
+  });
+  assert(integer_decimal_row.values["price"].isString());
+  assert(integer_decimal_row.values["price"].asString() == "10");
+
+  for (const auto& invalid_time : {"24:00", "06:60", "ab:cd"}) {
+    Json::Value candidate = values;
+    candidate["scheduled_time"] = invalid_time;
+    expect_invalid_public_row(candidate);
+  }
+  for (const auto& invalid_date : {"2026-02-30", "2026-13-01", "2025-02-29"}) {
+    Json::Value candidate = values;
+    candidate["scheduled_date"] = invalid_date;
+    expect_invalid_public_row(candidate);
+  }
+  for (const auto& invalid_datetime : {"2026-04-22T24:00:00", "2026-99-99T06:00:00"}) {
+    Json::Value candidate = values;
+    candidate["published_at"] = invalid_datetime;
+    expect_invalid_public_row(candidate);
+  }
+  for (const auto& invalid_decimal : {"12.34.56", "abc", "--10", "10."}) {
+    Json::Value candidate = values;
+    candidate["price"] = invalid_decimal;
+    expect_invalid_public_row(candidate);
+  }
 
   values["title"] = "updated";
   const auto updated_row = table_service.UpdateRow({
