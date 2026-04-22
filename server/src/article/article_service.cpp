@@ -35,6 +35,14 @@ ArticleService::ArticleService(
     user::UserGroupRepository& user_repository)
     : article_repository_(article_repository), user_repository_(user_repository) {}
 
+ArticleService::ArticleService(
+    ArticleRepository& article_repository,
+    user::UserGroupRepository& user_repository,
+    embedded_query::EmbeddedQueryService& embedded_query_service)
+    : article_repository_(article_repository),
+      user_repository_(user_repository),
+      embedded_query_service_(&embedded_query_service) {}
+
 std::vector<ArticleSummary> ArticleService::ListArticles(const std::string& actor_user_id) const {
   const auto actor = BuildPermissionUser(actor_user_id);
   std::vector<ArticleSummary> readable_articles;
@@ -78,7 +86,18 @@ ArticleDetails ArticleService::CreateArticle(const CreateArticleCommand& command
   if (!CanWrite(BuildPermissionUser(command.actor_user_id), proposed_article)) {
     throw std::runtime_error("forbidden");
   }
-  return article_repository_.CreateArticle(command);
+  auto normalized_command = command;
+  std::vector<embedded_query::StoredEmbeddedQuery> queries;
+  if (embedded_query_service_ != nullptr) {
+    const auto processed_queries = embedded_query_service_->PrepareForCreate(command.actor_user_id, command.body);
+    normalized_command.body = processed_queries.body;
+    queries = processed_queries.queries;
+  }
+  auto article = article_repository_.CreateArticle(normalized_command);
+  if (embedded_query_service_ != nullptr) {
+    embedded_query_service_->SaveArticleQueries(article.summary.article_id, queries);
+  }
+  return article;
 }
 
 ArticleDetails ArticleService::UpdateArticle(const UpdateArticleCommand& command) const {
@@ -109,7 +128,19 @@ ArticleDetails ArticleService::UpdateArticle(const UpdateArticleCommand& command
   if (!CanWrite(actor, proposed_article)) {
     throw std::runtime_error("forbidden");
   }
-  return article_repository_.UpdateArticle(command);
+  auto normalized_command = command;
+  std::vector<embedded_query::StoredEmbeddedQuery> queries;
+  if (embedded_query_service_ != nullptr) {
+    const auto processed_queries =
+        embedded_query_service_->PrepareForUpdate(command.actor_user_id, command.article_id, command.body);
+    normalized_command.body = processed_queries.body;
+    queries = processed_queries.queries;
+  }
+  auto article = article_repository_.UpdateArticle(normalized_command);
+  if (embedded_query_service_ != nullptr) {
+    embedded_query_service_->SaveArticleQueries(article.summary.article_id, queries);
+  }
+  return article;
 }
 
 void ArticleService::DeleteArticle(const DeleteArticleCommand& command) const {

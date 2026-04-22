@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "picaresque/article/article_repository.hpp"
+#include "picaresque/embedded_query/embedded_query_service.hpp"
 #include "picaresque/user/user_group_repository.hpp"
 
 namespace picaresque::article {
@@ -10,6 +11,10 @@ namespace picaresque::article {
 class ArticleService {
  public:
   ArticleService(ArticleRepository& article_repository, user::UserGroupRepository& user_repository);
+  ArticleService(
+      ArticleRepository& article_repository,
+      user::UserGroupRepository& user_repository,
+      embedded_query::EmbeddedQueryService& embedded_query_service);
 
   std::vector<ArticleSummary> ListArticles(const std::string& actor_user_id) const;
   ArticleDetails GetArticle(const std::string& actor_user_id, const std::string& article_id) const;
@@ -27,6 +32,7 @@ class ArticleService {
 
   ArticleRepository& article_repository_;
   user::UserGroupRepository& user_repository_;
+  embedded_query::EmbeddedQueryService* embedded_query_service_ = nullptr;
 };
 
 }  // namespace picaresque::article

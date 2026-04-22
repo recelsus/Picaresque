@@ -3,6 +3,7 @@
 #include <string_view>
 
 #include "picaresque/article/article_types.hpp"
+#include "picaresque/embedded_query/embedded_query_types.hpp"
 #include "picaresque/group/group_types.hpp"
 #include "picaresque/permission/types.hpp"
 #include "picaresque/table/table_types.hpp"
@@ -19,6 +20,8 @@ Json::Value ToJson(const permission::ScopedPermission& permission);
 Json::Value ToJson(const permission::AccessRequirement& requirement);
 Json::Value ToJson(const article::ArticleSummary& summary);
 Json::Value ToJson(const article::ArticleDetails& details);
+Json::Value ToJson(embedded_query::FragmentKind fragment_kind);
+Json::Value ToJson(const embedded_query::EmbeddedQueryExecutionResult& result);
 Json::Value ToJson(table::ColumnType column_type);
 Json::Value ToJson(const table::ColumnDefinition& column);
 Json::Value ToJson(const table::TableSummary& summary);

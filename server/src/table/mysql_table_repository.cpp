@@ -56,7 +56,7 @@ class MySqlTableRepository final : public TableRepository {
     ExecuteStatement(connection.get(), "USE `" + config_.dbname + "`");
     BeginTransaction(connection.get());
     try {
-      const auto table_id = GenerateUuidLikeString();
+      const auto table_id = GenerateTableId();
       ExecuteStatement(
           connection.get(),
           "INSERT INTO custom_tables "
@@ -299,6 +299,16 @@ class MySqlTableRepository final : public TableRepository {
       } else {
         value[i] = kHex[generator() % 16];
       }
+    }
+    return value;
+  }
+
+  static std::string GenerateTableId() {
+    static std::mt19937_64 generator(std::random_device{}());
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string value = "table_";
+    for (int i = 0; i < 16; ++i) {
+      value.push_back(kHex[generator() % 16]);
     }
     return value;
   }

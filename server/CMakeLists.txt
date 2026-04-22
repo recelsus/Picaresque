@@ -251,6 +251,52 @@ target_link_libraries(table_tests
 
 add_test(NAME table_tests COMMAND table_tests)
 
+add_library(picaresque_embedded_query
+  src/embedded_query/embedded_query_service.cpp
+  src/embedded_query/in_memory_embedded_query_repository.cpp
+  src/embedded_query/query_executor.cpp
+  src/embedded_query/query_parser.cpp
+  src/embedded_query/query_validator.cpp
+)
+
+target_include_directories(picaresque_embedded_query
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_target_properties(picaresque_embedded_query PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(picaresque_embedded_query
+  PUBLIC
+    picaresque_permission
+    picaresque_table
+    picaresque_user
+)
+
+target_link_libraries(picaresque_article
+  PUBLIC
+    picaresque_embedded_query
+)
+
+add_executable(embedded_query_tests
+  tests/embedded_query_tests.cpp
+)
+
+target_link_libraries(embedded_query_tests
+  PRIVATE
+    picaresque_article
+    picaresque_embedded_query
+    picaresque_permission
+    picaresque_table
+    picaresque_user
+)
+
+add_test(NAME embedded_query_tests COMMAND embedded_query_tests)
+
 if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_package(Drogon QUIET)
   find_path(MYSQL_INCLUDE_DIR mysql/mysql.h)
@@ -340,6 +386,7 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
     add_executable(picaresque_server
       src/access/mysql_access_repository.cpp
       src/article/mysql_article_repository.cpp
+      src/embedded_query/mysql_embedded_query_repository.cpp
       src/http/article_controller.cpp
       src/http/auth_controller.cpp
       src/http/group_management_controller.cpp
@@ -371,6 +418,7 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
         picaresque_access
         picaresque_article
         picaresque_auth
+        picaresque_embedded_query
         picaresque_permission
         picaresque_table
         picaresque_user

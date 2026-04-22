@@ -2,10 +2,14 @@
 #include <json/json.h>
 
 #include "picaresque/article/article_service.hpp"
+#include "picaresque/embedded_query/embedded_query_service.hpp"
+#include "picaresque/embedded_query/embedded_query_types.hpp"
 #include "picaresque/http/json_serialization.hpp"
 #include "picaresque/http/request_context.hpp"
 #include "picaresque/permission/errors.hpp"
 #include "../article/mysql_article_repository.hpp"
+#include "../embedded_query/mysql_embedded_query_repository.hpp"
+#include "../table/mysql_table_repository.hpp"
 #include "../user/mysql_user_group_repository.hpp"
 
 namespace picaresque::http {
@@ -50,7 +54,14 @@ std::vector<permission::AccessRequirement> ParseRequiredPermissions(const Json::
 class ArticleController : public drogon::HttpController<ArticleController> {
  public:
   ArticleController()
-      : service_(article::GetMySqlArticleRepository(), user::GetMySqlUserGroupRepository()) {}
+      : embedded_query_service_(
+            embedded_query::GetMySqlEmbeddedQueryRepository(),
+            table::GetMySqlTableRepository(),
+            user::GetMySqlUserGroupRepository()),
+        service_(
+            article::GetMySqlArticleRepository(),
+            user::GetMySqlUserGroupRepository(),
+            embedded_query_service_) {}
 
   METHOD_LIST_BEGIN
   ADD_METHOD_TO(ArticleController::CreateArticle, "/api/v1/articles", drogon::Post);
@@ -58,6 +69,7 @@ class ArticleController : public drogon::HttpController<ArticleController> {
   ADD_METHOD_TO(ArticleController::GetArticle, "/api/v1/articles/{1}", drogon::Get);
   ADD_METHOD_TO(ArticleController::UpdateArticle, "/api/v1/articles/{1}", drogon::Put);
   ADD_METHOD_TO(ArticleController::DeleteArticle, "/api/v1/articles/{1}", drogon::Delete);
+  ADD_METHOD_TO(ArticleController::ExecuteQuery, "/api/v1/articles/{1}/queries/{2}/execute", drogon::Post);
   METHOD_LIST_END
 
   void CreateArticle(
@@ -95,6 +107,8 @@ class ArticleController : public drogon::HttpController<ArticleController> {
       callback(response);
     } catch (const permission::ValidationError& error) {
       callback(BuildErrorResponse(request, drogon::k400BadRequest, "invalid_permission", error.what()));
+    } catch (const embedded_query::QueryValidationException& error) {
+      callback(BuildQueryErrorResponse(request, error));
     } catch (const std::runtime_error& error) {
       callback(MapError(request, error.what()));
     }
@@ -172,6 +186,8 @@ class ArticleController : public drogon::HttpController<ArticleController> {
       callback(drogon::HttpResponse::newHttpJsonResponse(body));
     } catch (const permission::ValidationError& error) {
       callback(BuildErrorResponse(request, drogon::k400BadRequest, "invalid_permission", error.what()));
+    } catch (const embedded_query::QueryValidationException& error) {
+      callback(BuildQueryErrorResponse(request, error));
     } catch (const std::runtime_error& error) {
       callback(MapError(request, error.what()));
     }
@@ -194,6 +210,27 @@ class ArticleController : public drogon::HttpController<ArticleController> {
       Json::Value body(Json::objectValue);
       body["meta"] = BuildMeta(request->getHeader("x-request-id"));
       body["data"]["deleted"] = true;
+      callback(drogon::HttpResponse::newHttpJsonResponse(body));
+    } catch (const std::runtime_error& error) {
+      callback(MapError(request, error.what()));
+    }
+  }
+
+  void ExecuteQuery(
+      const drogon::HttpRequestPtr& request,
+      std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+      const std::string& article_id,
+      const std::string& query_id) const {
+    RequestContext context;
+    if (!BuildContext(request, callback, context)) {
+      return;
+    }
+
+    try {
+      static_cast<void>(service_.GetArticle(context.authenticated_user->summary.user_id, article_id));
+      Json::Value body(Json::objectValue);
+      body["meta"] = BuildMeta(request->getHeader("x-request-id"));
+      body["data"] = ToJson(embedded_query_service_.ExecuteSavedQuery(article_id, query_id));
       callback(drogon::HttpResponse::newHttpJsonResponse(body));
     } catch (const std::runtime_error& error) {
       callback(MapError(request, error.what()));
@@ -223,12 +260,40 @@ class ArticleController : public drogon::HttpController<ArticleController> {
     if (error_code == "article_not_found") {
       return BuildErrorResponse(request, drogon::k404NotFound, error_code, error_code);
     }
+    if (error_code == "query_not_found") {
+      return BuildErrorResponse(request, drogon::k404NotFound, error_code, error_code);
+    }
+    if (error_code == "table_not_found") {
+      return BuildErrorResponse(request, drogon::k404NotFound, error_code, error_code);
+    }
     if (error_code == "article_locked") {
       return BuildErrorResponse(request, drogon::k409Conflict, error_code, error_code);
     }
     return BuildErrorResponse(request, drogon::k400BadRequest, error_code, error_code);
   }
 
+  drogon::HttpResponsePtr BuildQueryErrorResponse(
+      const drogon::HttpRequestPtr& request,
+      const embedded_query::QueryValidationException& error) const {
+    Json::Value body(Json::objectValue);
+    body["meta"] = BuildMeta(request->getHeader("x-request-id"));
+    body["error"]["code"] = "embedded_query_validation_failed";
+    body["error"]["message"] = "embedded query validation failed";
+    body["ok"] = false;
+    body["query_errors"] = Json::Value(Json::arrayValue);
+    for (const auto& query_error : error.query_errors) {
+      Json::Value value(Json::objectValue);
+      value["location_type"] = query_error.fragment_kind == embedded_query::FragmentKind::Inline ? "inline" : "block";
+      value["location_index"] = static_cast<Json::UInt64>(query_error.location_index);
+      value["message"] = query_error.message;
+      body["query_errors"].append(value);
+    }
+    auto response = drogon::HttpResponse::newHttpJsonResponse(body);
+    response->setStatusCode(drogon::k400BadRequest);
+    return response;
+  }
+
+  embedded_query::EmbeddedQueryService embedded_query_service_;
   article::ArticleService service_;
 };
 

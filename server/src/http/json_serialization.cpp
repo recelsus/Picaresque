@@ -81,6 +81,25 @@ Json::Value ToJson(const article::ArticleDetails& details) {
   return value;
 }
 
+Json::Value ToJson(embedded_query::FragmentKind fragment_kind) {
+  return Json::Value(fragment_kind == embedded_query::FragmentKind::Inline ? "inline" : "block");
+}
+
+Json::Value ToJson(const embedded_query::EmbeddedQueryExecutionResult& result) {
+  Json::Value value(Json::objectValue);
+  value["query_id"] = result.query_id;
+  value["fragment_kind"] = ToJson(result.fragment_kind);
+  value["table_id"] = result.table_id;
+  Json::Value columns(Json::arrayValue);
+  for (const auto& column : result.columns) {
+    columns.append(column);
+  }
+  value["columns"] = columns;
+  value["rows"] = result.rows;
+  value["row_count"] = static_cast<Json::UInt64>(result.row_count);
+  return value;
+}
+
 Json::Value ToJson(table::ColumnType column_type) {
   return Json::Value(table::ColumnTypeToString(column_type));
 }
