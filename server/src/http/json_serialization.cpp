@@ -2,6 +2,8 @@
 
 #include <json/json.h>
 
+#include "picaresque/table/table_service.hpp"
+
 namespace picaresque::http {
 namespace {
 
@@ -76,6 +78,54 @@ Json::Value ToJson(const article::ArticleSummary& summary) {
 Json::Value ToJson(const article::ArticleDetails& details) {
   Json::Value value = ToJson(details.summary);
   value["body"] = details.body;
+  return value;
+}
+
+Json::Value ToJson(table::ColumnType column_type) {
+  return Json::Value(table::ColumnTypeToString(column_type));
+}
+
+Json::Value ToJson(const table::ColumnDefinition& column) {
+  Json::Value value(Json::objectValue);
+  value["column_id"] = column.column_id;
+  value["column_name"] = column.column_name;
+  value["column_type"] = ToJson(column.column_type);
+  value["is_required"] = column.is_required;
+  return value;
+}
+
+Json::Value ToJson(const table::TableSummary& summary) {
+  Json::Value value(Json::objectValue);
+  value["table_id"] = summary.table_id;
+  value["table_name"] = summary.table_name;
+  value["created_by_user_id"] = summary.created_by_user_id;
+  value["updated_by_user_id"] = summary.updated_by_user_id;
+
+  Json::Value required_permissions(Json::arrayValue);
+  for (const auto& permission : summary.required_permissions) {
+    required_permissions.append(ToJson(permission));
+  }
+  value["required_permissions"] = required_permissions;
+  return value;
+}
+
+Json::Value ToJson(const table::TableDetails& details) {
+  Json::Value value = ToJson(details.summary);
+  Json::Value columns(Json::arrayValue);
+  for (const auto& column : details.columns) {
+    columns.append(ToJson(column));
+  }
+  value["columns"] = columns;
+  return value;
+}
+
+Json::Value ToJson(const table::TableRow& row) {
+  Json::Value value(Json::objectValue);
+  value["row_id"] = row.row_id;
+  value["table_id"] = row.table_id;
+  value["created_by_user_id"] = row.created_by_user_id;
+  value["updated_by_user_id"] = row.updated_by_user_id;
+  value["values"] = row.values;
   return value;
 }
 

@@ -7,6 +7,20 @@ enable_testing()
 option(PICARESQUE_ENABLE_DROGON_SERVER "Build the Drogon HTTP server skeleton" ON)
 
 find_package(OpenSSL REQUIRED)
+find_path(JSONCPP_INCLUDE_DIRS json/json.h)
+find_library(JSONCPP_LIBRARIES NAMES jsoncpp)
+
+if(NOT JSONCPP_INCLUDE_DIRS OR NOT JSONCPP_LIBRARIES)
+  message(FATAL_ERROR "jsoncpp library not found")
+endif()
+
+if(NOT TARGET Jsoncpp_lib)
+  add_library(Jsoncpp_lib INTERFACE IMPORTED)
+  set_target_properties(Jsoncpp_lib PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${JSONCPP_INCLUDE_DIRS}"
+    INTERFACE_LINK_LIBRARIES "${JSONCPP_LIBRARIES}"
+  )
+endif()
 
 add_library(picaresque_permission
   src/permission/access.cpp
@@ -201,6 +215,42 @@ target_link_libraries(article_tests
 
 add_test(NAME article_tests COMMAND article_tests)
 
+add_library(picaresque_table
+  src/table/in_memory_table_repository.cpp
+  src/table/table_service.cpp
+)
+
+target_include_directories(picaresque_table
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_target_properties(picaresque_table PROPERTIES
+  CXX_STANDARD 20
+  CXX_STANDARD_REQUIRED ON
+  CXX_EXTENSIONS OFF
+)
+
+target_link_libraries(picaresque_table
+  PUBLIC
+    Jsoncpp_lib
+    picaresque_permission
+    picaresque_user
+)
+
+add_executable(table_tests
+  tests/table_tests.cpp
+)
+
+target_link_libraries(table_tests
+  PRIVATE
+    picaresque_permission
+    picaresque_table
+    picaresque_user
+)
+
+add_test(NAME table_tests COMMAND table_tests)
+
 if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_package(Drogon QUIET)
   find_path(MYSQL_INCLUDE_DIR mysql/mysql.h)
@@ -259,6 +309,7 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
         picaresque_access
         picaresque_auth
         picaresque_permission
+        picaresque_table
         picaresque_user
     )
 
@@ -294,8 +345,10 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
       src/http/group_management_controller.cpp
       src/http/json_serialization.cpp
       src/http/request_context.cpp
+      src/http/table_controller.cpp
       src/http/user_management_controller.cpp
       src/main.cpp
+      src/table/mysql_table_repository.cpp
       src/user/mysql_user_group_repository.cpp
     )
 
@@ -319,6 +372,7 @@ if(PICARESQUE_ENABLE_DROGON_SERVER)
         picaresque_article
         picaresque_auth
         picaresque_permission
+        picaresque_table
         picaresque_user
     )
   else()
