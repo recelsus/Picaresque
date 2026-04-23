@@ -229,6 +229,18 @@ int main() {
       query_service.ExecuteSavedQuery(where_extended_article.summary.article_id, where_extended_query.query_id);
   assert(where_extended_result.rows.size() == 2);
 
+  const auto escaped_quote_article = article_service.CreateArticle({
+      .actor_user_id = member.summary.user_id,
+      .title = "escaped quote article",
+      .body = "`query: SELECT name FROM " + writable_table.summary.table_id + " WHERE note = 'owner''s memo'`",
+      .required_permissions = {{.group_id = details.summary.group_id, .read = 30, .write = 30}},
+  });
+  const auto escaped_quote_query =
+      query_repository.ListByArticleId(escaped_quote_article.summary.article_id).front();
+  const auto escaped_quote_result =
+      query_service.ExecuteSavedQuery(escaped_quote_article.summary.article_id, escaped_quote_query.query_id);
+  assert(escaped_quote_result.rows.empty());
+
   const auto aggregate_article = article_service.CreateArticle({
       .actor_user_id = member.summary.user_id,
       .title = "aggregate article",
@@ -351,8 +363,24 @@ int main() {
           " ON " + writable_table.summary.table_id + ".owner_key = " + joined_table.summary.table_id + ".owner_key`",
       "unsupported JOIN");
   expect_query_rejected(
+      "`query: SELECT name FROM " + writable_table.summary.table_id + " JOIN " + joined_table.summary.table_id +
+          " USING (owner_key)`",
+      "unsupported JOIN");
+  expect_query_rejected(
+      "`query: SELECT owner_key, count(*) FROM " + writable_table.summary.table_id + "`",
+      "GROUP BY required");
+  expect_query_rejected(
+      "`query: SELECT owner_key, name, count(*) FROM " + writable_table.summary.table_id + " GROUP BY owner_key`",
+      "selected column must appear in GROUP BY");
+  expect_query_rejected(
       "`query: SELECT name FROM " + writable_table.summary.table_id + " GROUP BY name`",
       "unsupported GROUP BY");
+  expect_query_rejected(
+      "`query: SELECT owner_key, count(*) FROM " + writable_table.summary.table_id + " GROUP BY owner_key HAVING count(*) > 1`",
+      "unsupported query tail");
+  expect_query_rejected(
+      "`query: SELECT name FROM " + writable_table.summary.table_id + " WHERE note = 'unterminated`",
+      "unterminated string literal");
 
   const auto read_restricted_article = article_service.CreateArticle({
       .actor_user_id = admin.summary.user_id,

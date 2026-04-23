@@ -74,6 +74,13 @@ std::optional<std::vector<Token>> Tokenize(const std::string& sql, std::string& 
       while (index < sql.size() && sql[index] != '\'') {
         value.push_back(sql[index++]);
       }
+      while (index + 1 < sql.size() && sql[index] == '\'' && sql[index + 1] == '\'') {
+        value.push_back('\'');
+        index += 2;
+        while (index < sql.size() && sql[index] != '\'') {
+          value.push_back(sql[index++]);
+        }
+      }
       if (index >= sql.size()) {
         error_message = "unterminated string literal";
         return std::nullopt;
