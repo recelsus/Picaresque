@@ -302,6 +302,17 @@ target_link_libraries(embedded_query_tests
 
 add_test(NAME embedded_query_tests COMMAND embedded_query_tests)
 
+add_executable(query_validator_tests
+  tests/query_validator_tests.cpp
+)
+
+target_link_libraries(query_validator_tests
+  PRIVATE
+    picaresque_embedded_query
+)
+
+add_test(NAME query_validator_tests COMMAND query_validator_tests)
+
 if(PICARESQUE_ENABLE_DROGON_SERVER)
   find_package(Drogon QUIET)
   find_path(MYSQL_INCLUDE_DIR mysql/mysql.h)

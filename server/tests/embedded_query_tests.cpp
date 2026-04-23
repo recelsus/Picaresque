@@ -119,6 +119,16 @@ int main() {
       .columns = {{{.column_name = "name", .column_type = table::ColumnType::Varchar}}},
       .required_permissions = {{.group_id = details.summary.group_id, .read = 60, .write = 60}},
   });
+  const auto joined_read_only_table = table_service.CreateTable({
+      .actor_user_id = owner.summary.user_id,
+      .table_name = "JoinedReadonly",
+      .columns =
+          {
+              {.column_name = "owner_key", .column_type = table::ColumnType::Varchar},
+              {.column_name = "label", .column_type = table::ColumnType::Varchar},
+          },
+      .required_permissions = {{.group_id = details.summary.group_id, .read = 60, .write = 60}},
+  });
 
   const std::string body =
       "inline `query: SELECT count(*) FROM " + writable_table.summary.table_id + " LIMIT 1`.\n"
@@ -346,6 +356,19 @@ int main() {
       "unknown query_id");
   expect_query_rejected(
       "`query: SELECT name FROM " + read_only_table.summary.table_id + " LIMIT 1`",
+      "table write permission required");
+  expect_query_rejected(
+      "`query: SELECT " + writable_table.summary.table_id + ".name, " + joined_read_only_table.summary.table_id +
+          ".label FROM " + writable_table.summary.table_id + " JOIN " + joined_read_only_table.summary.table_id +
+          " ON " + writable_table.summary.table_id + ".owner_key = " + joined_read_only_table.summary.table_id +
+          ".owner_key`",
+      "table write permission required");
+  expect_query_rejected(
+      "`query: SELECT " + writable_table.summary.table_id + ".name, " + joined_table.summary.table_id +
+          ".label, " + joined_read_only_table.summary.table_id + ".label FROM " + writable_table.summary.table_id +
+          " JOIN " + joined_table.summary.table_id + " ON " + writable_table.summary.table_id + ".owner_key = " +
+          joined_table.summary.table_id + ".owner_key JOIN " + joined_read_only_table.summary.table_id + " ON " +
+          writable_table.summary.table_id + ".owner_key = " + joined_read_only_table.summary.table_id + ".owner_key`",
       "table write permission required");
   expect_query_rejected(
       "`query: SELECT name FROM " + writable_table.summary.table_id + " JOIN " + joined_table.summary.table_id +
