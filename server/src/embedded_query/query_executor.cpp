@@ -1,5 +1,10 @@
 #include "picaresque/embedded_query/query_executor.hpp"
 
+#include "query_aggregate.hpp"
+#include "query_execution_types.hpp"
+#include "query_value.hpp"
+#include "query_where_evaluator.hpp"
+
 #include <algorithm>
 #include <map>
 #include <stdexcept>
@@ -8,9 +13,6 @@
 
 namespace picaresque::embedded_query {
 namespace {
-
-using RowContext = std::map<std::string, Json::Value>;
-using TableDetailsMap = std::map<std::string, table::TableDetails>;
 
 std::vector<std::string> AllColumnNames(const table::TableDetails& table) {
   std::vector<std::string> names;
@@ -48,70 +50,6 @@ void ValidateSelectedColumns(
   }
 }
 
-std::string ColumnOutputName(const QueryValidationResult::ColumnRef& column, bool include_table_id) {
-  if (include_table_id) {
-    return column.table_id + "." + column.column_name;
-  }
-  return column.column_name;
-}
-
-Json::Value GetColumnValue(const RowContext& context, const QueryValidationResult::ColumnRef& column) {
-  const auto table_it = context.find(column.table_id);
-  if (table_it == context.end() || !table_it->second.isMember(column.column_name)) {
-    return Json::Value();
-  }
-  return table_it->second[column.column_name];
-}
-
-std::string JsonValueToComparableString(const Json::Value& value) {
-  if (value.isString()) {
-    return value.asString();
-  }
-  if (value.isBool()) {
-    return value.asBool() ? "true" : "false";
-  }
-  if (value.isNumeric()) {
-    return value.asString();
-  }
-  return "";
-}
-
-bool CompareValues(const Json::Value& left, const std::string& op, const Json::Value& right) {
-  if (left.isNumeric() && right.isNumeric()) {
-    const auto lhs = left.asDouble();
-    const auto rhs = right.asDouble();
-    if (op == "=") return lhs == rhs;
-    if (op == "!=") return lhs != rhs;
-    if (op == "<") return lhs < rhs;
-    if (op == "<=") return lhs <= rhs;
-    if (op == ">") return lhs > rhs;
-    if (op == ">=") return lhs >= rhs;
-  }
-  const auto lhs = JsonValueToComparableString(left);
-  const auto rhs = JsonValueToComparableString(right);
-  if (op == "=") return lhs == rhs;
-  if (op == "!=") return lhs != rhs;
-  if (op == "<") return lhs < rhs;
-  if (op == "<=") return lhs <= rhs;
-  if (op == ">") return lhs > rhs;
-  if (op == ">=") return lhs >= rhs;
-  return false;
-}
-
-Json::Value LiteralToJson(const std::string& literal) {
-  if (literal == "true") return Json::Value(true);
-  if (literal == "false") return Json::Value(false);
-  try {
-    std::size_t parsed = 0;
-    const auto number = std::stod(literal, &parsed);
-    if (parsed == literal.size()) {
-      return Json::Value(number);
-    }
-  } catch (...) {
-  }
-  return Json::Value(literal);
-}
-
 std::vector<RowContext> LoadInitialContexts(table::TableRepository& repository, const std::string& table_id) {
   std::vector<RowContext> contexts;
   for (const auto& row : repository.ListRows(table_id)) {
@@ -139,19 +77,30 @@ std::vector<RowContext> ApplyJoin(
   return joined_contexts;
 }
 
-std::vector<RowContext> ApplyWhere(
-    std::vector<RowContext> contexts,
-    const QueryValidationResult::WhereCondition& where) {
-  const auto literal = LiteralToJson(where.literal);
-  contexts.erase(
-      std::remove_if(
-          contexts.begin(),
-          contexts.end(),
-          [&](const RowContext& context) {
-            return !CompareValues(GetColumnValue(context, where.left), where.op, literal);
-          }),
-      contexts.end());
-  return contexts;
+void SortResultRows(
+    Json::Value& rows,
+    const QueryValidationResult::OrderBy& order_by,
+    bool include_table_id) {
+  std::vector<Json::Value> sorted_rows;
+  for (const auto& row : rows) {
+    sorted_rows.push_back(row);
+  }
+  const auto key = ColumnOutputName(order_by.column, include_table_id);
+  std::sort(
+      sorted_rows.begin(),
+      sorted_rows.end(),
+      [&](const Json::Value& lhs, const Json::Value& rhs) {
+        const auto left = lhs.isMember(key) ? JsonValueToComparableString(lhs[key]) : "";
+        const auto right = rhs.isMember(key) ? JsonValueToComparableString(rhs[key]) : "";
+        if (left == right) {
+          return false;
+        }
+        return order_by.descending ? left > right : left < right;
+      });
+  rows = Json::Value(Json::arrayValue);
+  for (const auto& row : sorted_rows) {
+    rows.append(row);
+  }
 }
 
 }  // namespace
@@ -176,6 +125,7 @@ EmbeddedQueryExecutionResult QueryExecutor::Execute(const StoredEmbeddedQuery& q
     }
     tables[table_id] = *table;
   }
+
   auto contexts = LoadInitialContexts(table_repository_, validation->table_id);
   for (const auto& join : validation->joins) {
     contexts = ApplyJoin(table_repository_, contexts, join);
@@ -204,16 +154,56 @@ EmbeddedQueryExecutionResult QueryExecutor::Execute(const StoredEmbeddedQuery& q
       .table_id = query.table_id,
   };
 
-  if (validation->count_all) {
-    result.columns = {"count"};
-    Json::Value row(Json::objectValue);
-    row["count"] = static_cast<Json::UInt64>(contexts.size());
-    result.rows.append(row);
-    result.row_count = 1;
+  const bool include_table_id = validation->table_ids.size() > 1;
+  if (!validation->aggregate_selections.empty()) {
+    for (const auto& aggregate : validation->aggregate_selections) {
+      if (!aggregate.count_star) {
+        ValidateSelectedColumns({aggregate.column}, tables);
+      }
+    }
+    ValidateSelectedColumns(validation->selected_columns, tables);
+    for (const auto& column : validation->selected_columns) {
+      result.columns.push_back(ColumnOutputName(column, include_table_id));
+    }
+    for (const auto& aggregate : validation->aggregate_selections) {
+      result.columns.push_back(AggregateOutputName(aggregate, include_table_id));
+    }
+
+    if (validation->group_by_columns.empty()) {
+      Json::Value row(Json::objectValue);
+      for (const auto& aggregate : validation->aggregate_selections) {
+        row[AggregateOutputName(aggregate, include_table_id)] = ComputeAggregate(contexts, aggregate);
+      }
+      result.rows.append(row);
+    } else {
+      std::map<std::string, std::vector<RowContext>> groups;
+      for (const auto& context : contexts) {
+        groups[BuildGroupKey(context, validation->group_by_columns)].push_back(context);
+      }
+      for (const auto& [_, group_contexts] : groups) {
+        if (group_contexts.empty()) {
+          continue;
+        }
+        Json::Value row(Json::objectValue);
+        for (const auto& column : validation->selected_columns) {
+          row[ColumnOutputName(column, include_table_id)] = GetColumnValue(group_contexts.front(), column);
+        }
+        for (const auto& aggregate : validation->aggregate_selections) {
+          row[AggregateOutputName(aggregate, include_table_id)] = ComputeAggregate(group_contexts, aggregate);
+        }
+        result.rows.append(row);
+      }
+    }
+    if (validation->order_by.has_value()) {
+      SortResultRows(result.rows, *validation->order_by, include_table_id);
+    }
+    while (result.rows.size() > validation->limit) {
+      result.rows.removeIndex(static_cast<Json::ArrayIndex>(result.rows.size() - 1), nullptr);
+    }
+    result.row_count = static_cast<std::uint64_t>(result.rows.size());
     return result;
   }
 
-  const bool include_table_id = validation->table_ids.size() > 1;
   if (validation->select_all) {
     result.columns = include_table_id ? AllQualifiedColumnNames(tables) : AllColumnNames(tables.at(validation->table_id));
   } else {

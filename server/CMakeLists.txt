@@ -254,9 +254,14 @@ add_test(NAME table_tests COMMAND table_tests)
 add_library(picaresque_embedded_query
   src/embedded_query/embedded_query_service.cpp
   src/embedded_query/in_memory_embedded_query_repository.cpp
+  src/embedded_query/query_aggregate.cpp
   src/embedded_query/query_executor.cpp
   src/embedded_query/query_parser.cpp
+  src/embedded_query/query_select_parser.cpp
+  src/embedded_query/query_tokenizer.cpp
+  src/embedded_query/query_value.cpp
   src/embedded_query/query_validator.cpp
+  src/embedded_query/query_where_evaluator.cpp
 )
 
 target_include_directories(picaresque_embedded_query
